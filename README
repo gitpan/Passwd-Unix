@@ -1,0 +1,81 @@
+NAME
+	Passwd::Unix 
+
+SYNOPSIS
+	use Passwd::Unix;
+	
+	my $pu = Passwd::Unix->new();
+	my $err = $pu->user("example", $pu->encpass("my_secret"), $pu->maxuid + 1, 10,
+						"My User", "/home/example", "/bin/bash" );
+	$pu->passwd("example", $pu->encpass("newsecret"));
+	foreach my $user ($pu->users) {
+		print "Username: $user\nFull Name: ", $pu->gecos($user), "\n\n";
+	}
+	my $uid = $pu->uid('example');
+	$pu->del("example");
+
+	# or 
+
+	use Passwd::Unix qw(del encpass gecos gid uid home maxuid passwd shell rename user users);
+	
+	my $err = user( "example", encpass("my_secret"), $pu->maxuid + 1, 10,
+					"My User", "/home/example", "/bin/bash" );
+	passwd("example",encpass("newsecret"));
+	foreach my $user (users()) {
+		print "Username: $user\nFull Name: ", gecos($user), "\n\n";
+	}
+	my $uid = uid('example');
+	del("example");
+
+DESCRIPTION
+	The Passwd::Unix module provides an abstract interface to /etc/passwd and /etc/shadow format files. It is inspired by Unix::PasswdFile module (this one does not handle /etc/shadow file, what is necessary in modern systems like Sun Solaris 10 or Linux).
+
+SUBROUTINES/METHODS
+
+	new( )
+	Constructor.
+
+	delete( USERNAME0, USERNAME1... )
+	This method will delete the list of users. It has no effect if the supplied user does not exist.
+
+	encpass( PASSWORD )
+	This method will encrypt plain text into unix style MD5 password.
+
+	gecos( USERNAME [,GECOS] )
+	Read or modify a user's GECOS string (typically their full name). Returns the result of operation (TRUE or FALSE) if GECOS was specified otherwhise returns the GECOS.
+
+	gid( USERNAME [,GID] )
+	Read or modify a user's GID. Returns the result of operation (TRUE or FALSE) if GID was specified otherwhise returns the GID.
+
+	home( USERNAME [,HOMEDIR] )
+	Read or modify a user's home directory. Returns the result of operation (TRUE or FALSE) if HOMEDIR was specified otherwhise returns the HOMEDIR.
+
+	maxuid( [IGNORE] )
+	This method returns the maximum UID in use by all users. 
+
+	passwd( USERNAME [,PASSWD] )
+	Read or modify a user's password. Returns the encrypted password in either case. If you have a plaintext password, use the encpass method to encrypt it before passing it to this method. Returns the result of operation (TRUE or FALSE) if PASSWD was specified otherwhise returns the PASSWD.
+
+	rename( OLDNAME, NEWNAME )
+	This method changes the username for a user. If NEWNAME corresponds to an existing user, that user will be overwritten. It returns FALSE on failure and TRUE on success.
+
+	shell( USERNAME [,SHELL] )
+	Read or modify a user's shell. Returns the result of operation (TRUE or FALSE) if SHELL was specified otherwhise returns the SHELL.
+
+	uid( USERNAME [,UID] )
+	Read or modify a user's UID. Returns the result of operation (TRUE or FALSE) if UID was specified otherwhise returns the UID.
+
+	user( USERNAME [,PASSWD, UID, GID, GECOS, HOMEDIR, SHELL] )
+	This method can add, modify, or return information about a user. Supplied with a single username parameter, it will return a six element list consisting of (PASSWORD, UID, GID, GECOS, HOMEDIR, SHELL), or undef if no such user exists. If you supply all seven parameters, the named user will be created or modified if it already exists.
+
+	users()
+	This method returns a list of all existing usernames. 
+
+
+BUGS
+	None known.
+
+AUTHOR
+   Strzelecki £ukasz <strzelecki at rswsystems dot pl>
+
+
