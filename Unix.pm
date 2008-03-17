@@ -8,7 +8,7 @@ use Passwd::Linux qw(modpwinfo setpwinfo rmpwnam mgetpwnam);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.02';
+$VERSION = '0.3';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(del encpass gecos gid uid home maxuid passwd shell rename user users);
 #======================================================================
