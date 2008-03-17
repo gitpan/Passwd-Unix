@@ -8,7 +8,7 @@ use Passwd::Linux qw(modpwinfo setpwinfo rmpwnam mgetpwnam);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.3';
+$VERSION = '0.31';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(del encpass gecos gid uid home maxuid passwd shell rename user users);
 #======================================================================
@@ -93,7 +93,6 @@ sub user {
 	return getpwnam($_[0]) unless defined $_[1];
 	__PACKAGE__::delete($_[0]);
 	return setpwinfo(@_);
-
 }
 #======================================================================
 sub users {
@@ -151,7 +150,7 @@ The Passwd::Unix module provides an abstract interface to /etc/passwd and /etc/s
 
 Constructor.
 
-=item B<delete( USERNAME0, USERNAME1... )>
+=item B<del( USERNAME0, USERNAME1... )>
 
 This method will delete the list of users. It has no effect if the supplied user does not exist.
 
@@ -171,13 +170,13 @@ Read or modify a user's GID. Returns the result of operation (TRUE or FALSE) if 
 
 Read or modify a user's home directory. Returns the result of operation (TRUE or FALSE) if HOMEDIR was specified otherwhise returns the HOMEDIR.
 
-=item B<maxuid( [IGNORE] )>
+=item B<maxuid( )>
 
 This method returns the maximum UID in use by all users. 
 
 =item B<passwd( USERNAME [,PASSWD] )>
 
-Read or modify a user's password. Returns the encrypted password in either case. If you have a plaintext password, use the encpass method to encrypt it before passing it to this method. Returns the result of operation (TRUE or FALSE) if PASSWD was specified otherwhise returns the PASSWD.
+Read or modify a user's password. If you have a plaintext password, use the encpass method to encrypt it before passing it to this method. Returns the result of operation (TRUE or FALSE) if PASSWD was specified otherwhise returns the PASSWD.
 
 =item B<rename( OLDNAME, NEWNAME )>
 
@@ -205,7 +204,9 @@ This method returns a list of all existing usernames.
 
 =over 4
 
-=item Gtk2::GladeXML
+=item Passwd::Linux
+
+=item Crypt::PasswdMD5
 
 =item Exporter
 
