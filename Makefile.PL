@@ -4,4 +4,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     'NAME'	=> 'Passwd::Unix',
     'VERSION_FROM' => 'Unix.pm', # finds $VERSION
+    'PREREQ_PM'     => { 'Crypt::PasswdMD5' => 1.3,  'Passwd::Linux' => 1.2, 'Exporter' => 0 }, # e.g., Module::Name => 1.1
+    ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
+      (AUTHOR     => '£ukasz Strzelecki <strzelec@rswsystems.pl>') : ()),
 );
