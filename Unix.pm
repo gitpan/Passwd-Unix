@@ -8,7 +8,7 @@ use Passwd::Linux qw(modpwinfo setpwinfo rmpwnam mgetpwnam);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.32';
+$VERSION = '0.33';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(del encpass gecos gid uid home maxuid passwd shell rename user users);
 #======================================================================
@@ -82,7 +82,7 @@ sub shell {
 sub rename {
 	shift if $_[0] =~ __PACKAGE__;
 	my ($name,$passwd,$uid,$gid, $quota,$comment,$gcos,$dir,$shell,$expire) = getpwnam($_[0]);
-	__PACKAGE__::delete($name);
+	__PACKAGE__->delete($name);
 	return setpwinfo($_[1], $passwd, $uid, $gid, $gcos, $dir, $shell);
 }
 #======================================================================
@@ -91,7 +91,7 @@ sub user {
 	shift if $_[0] =~ __PACKAGE__;
 
 	return getpwnam($_[0]) unless defined $_[1];
-	__PACKAGE__::delete($_[0]);
+	__PACKAGE__->delete($_[0]);
 	return setpwinfo(@_);
 }
 #======================================================================
