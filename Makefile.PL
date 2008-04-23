@@ -3,8 +3,22 @@ use ExtUtils::MakeMaker;
 # the contents of the Makefile that is written.
 WriteMakefile(
     'NAME'	=> 'Passwd::Unix',
-    'VERSION_FROM' => 'Unix.pm', # finds $VERSION
-    'PREREQ_PM'     => { 'Crypt::PasswdMD5' => 1.3,  'Passwd::Linux' => 1.2, 'Exporter' => 0 }, # e.g., Module::Name => 1.1
-    ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
-      (AUTHOR     => '£ukasz Strzelecki <strzelec@rswsystems.pl>') : ()),
+    #($] >= 5.005 ? (   ## Add these new keywords supported since 5.005
+#    (AUTHOR     => '£ukasz Strzelecki <strzelec@rswsystems.pl>') : ()),
+	
+    AUTHOR        => '£ukasz Strzelecki <strzelec@rswsystems.pl>',
+    VERSION_FROM  => 'lib/Passwd/Unix.pm',
+#    ABSTRACT_FROM => 'lib/Passwd/Unix.pm',
+    PL_FILES      => {},
+    PREREQ_PM     => {
+        'Carp'						=> 0,
+		'Crypt::PasswdMD5'			=> 1.3,
+		'File::Spec'				=> 0,
+		'File::Path'				=> 0,
+		'File::Copy'				=> 0,
+		'Struct::Compare'			=> 0,
+		'File::Basename'			=> 0,
+		'Exporter'					=> 0,
+    },
+	#) : ()),
 );
