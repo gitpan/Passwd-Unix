@@ -31,6 +31,12 @@ SYNOPSIS
             my $uid = uid('example');
             del("example");
 
+ABSTRACT
+    Passwd::Unix provides an abstract object-oriented and function interface
+    to standard Unix files, such as /etc/passwd, /etc/shadow, /etc/group.
+    Additionaly this module provides environment to testing new software,
+    without using system critical files in /etc/dir.
+
 DESCRIPTION
     The Passwd::Unix module provides an abstract interface to /etc/passwd,
     /etc/shadow and /etc/group format files. It is inspired by
@@ -38,15 +44,15 @@ DESCRIPTION
     is necessary in modern systems like Sun Solaris 10 or Linux).
 
 SUBROUTINES/METHODS
-    new( [ param0 = TRUE, param1 => FALSE...)>
+    new( [ param0 = 1, param1 => 0... ] )>
         Constructor. Possible parameters are:
 
         passwd - path to passwd file; default "/etc/passwd"
         shadow - path to shadow file; default "/etc/shadow"
         group - path to group file; default "/etc/group"
-        backup - boolean; if set to TRUE, backup will be made; default TRUE
-        warnings - boolean; if set to TRUE, important warnings will be
-        displayed; default FALSE
+        backup - boolean; if set to 1, backup will be made; default 1
+        warnings - boolean; if set to 1, important warnings will be
+        displayed; default 0
 
     check_sanity()
         This method check if environment is sane. I.e. if users in *shadow*
@@ -68,7 +74,7 @@ SUBROUTINES/METHODS
 
     gecos( USERNAME [,GECOS] )
         Read or modify a user's GECOS string (typically their full name).
-        Returns the result of operation (TRUE or FALSE) if GECOS was
+        Returns the result of operation (1 or "undef") if GECOS was
         specified. Otherwhise returns the GECOS.
 
     gid( USERNAME [,GID] )
@@ -77,8 +83,8 @@ SUBROUTINES/METHODS
 
     home( USERNAME [,HOMEDIR] )
         Read or modify a user's home directory. Returns the result of
-        operation (TRUE or FALSE) if HOMEDIR was specified otherwhise
-        returns the HOMEDIR.
+        operation (1 or "undef") if HOMEDIR was specified otherwhise returns
+        the HOMEDIR.
 
     maxuid( )
         This method returns the maximum UID in use by all users.
@@ -89,8 +95,8 @@ SUBROUTINES/METHODS
     passwd( USERNAME [,PASSWD] )
         Read or modify a user's password. If you have a plaintext password,
         use the encpass method to encrypt it before passing it to this
-        method. Returns the result of operation (TRUE or FALSE) if PASSWD
-        was specified. Otherwhise returns the PASSWD.
+        method. Returns the result of operation (1 or "undef") if PASSWD was
+        specified. Otherwhise returns the PASSWD.
 
     rename( OLDNAME, NEWNAME )
         This method changes the username for a user. If NEWNAME corresponds
@@ -162,6 +168,8 @@ BUGS AND LIMITATIONS
     None. I hope.
 
 THANKS
+    Thanks to Foudil BRÉTEL for some remarks, suggestions as well as
+    supplying relevant patch!
     BIG thanks to Artem Russakovskii for reporting a bug.
 
 AUTHOR

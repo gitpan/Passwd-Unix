@@ -1,4 +1,11 @@
 Revision history for Perl extension Passwd::Unix.
 
+0.41   Thu May 27 23:40:55 CEST 2008
+	- Added option for many instances. Thanks to Foudil BRÉTEL for some remarks, suggestions as well as supplying relevant patch!
+
+0.40   ???
+	- Thanks to Artem Russakovskii for reporting a bug.
+	- Fixed bug in order of users.
+
 0.01   Sat Mar 16 21:20:19 EDT 2008
 	- First release.

@@ -13,7 +13,7 @@ use File::Basename qw(dirname basename);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.4';
+$VERSION = '0.41';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -43,12 +43,12 @@ my $_CHECK = {
 	passwd 	=> sub { return if not defined $_[0]; TRUE},
 };
 #======================================================================
-my $self = { };
+my $Self = __PACKAGE__->new();
 #======================================================================
 sub new {
 	my ($class, %params) = @_;
 	
-	$self = bless {
+	my $self = bless {
 				passwd 		=> (defined $params{passwd} 	? $params{passwd} 	: PASSWD	),
 				shadow 		=> (defined $params{shadow} 	? $params{shadow} 	: SHADOW	),
 				group 		=> (defined $params{group} 		? $params{group} 	: GROUP		),
@@ -63,6 +63,7 @@ sub new {
 }
 #======================================================================
 sub check_sanity {
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	return TRUE if compare([$self->users()], [$self->users_from_shadow()]);
 	carp(qq/\nYour ENVIRONMENT IS INSANE! Users in files "/.$self->passwd_file().q/" and "/.$self->shadow_file().qq/ are diffrent!!!\nI'll continue, but it is YOUR RISK! You'll probably go into BIG troubles!\n\n/);
 	warn "\a\n";
@@ -71,6 +72,7 @@ sub check_sanity {
 }
 #======================================================================
 sub reset {
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	$self->{passwd} = PASSWD;
 	$self->{shadow} = SHADOW;
 	$self->{group}  = GROUP;
@@ -78,13 +80,14 @@ sub reset {
 }
 #======================================================================
 sub encpass {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($val) = @_;
 	return unless defined $val;
 	return unix_md5_crypt($val);
 }
 #======================================================================
 sub _do_backup {
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($sec,$min,$hour,$mday,$mon,$year) = localtime(time);
 	my $dir = File::Spec->catfile($self->passwd_file.'.bak', ($year+1900).'.'.$mon.'.'.$mday.'-'.$hour.'.'.$min.'.'.$sec);
 	mkpath $dir;
@@ -94,7 +97,7 @@ sub _do_backup {
 }
 #======================================================================
 sub passwd_file { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($val) = @_;
 	return $self->{passwd} unless defined $val;
 	$self->{passwd} = File::Spec->canonpath($val);
@@ -102,7 +105,7 @@ sub passwd_file {
 }
 #======================================================================
 sub shadow_file { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($val) = @_;
 	return $self->{shadow} unless defined $val;
 	$self->{shadow} = File::Spec->canonpath($val);
@@ -110,7 +113,7 @@ sub shadow_file {
 }
 #======================================================================
 sub group_file { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($val) = @_;
 	return $self->{group} unless defined $val;
 	$self->{group} = File::Spec->canonpath($val);
@@ -118,7 +121,7 @@ sub group_file {
 }
 #======================================================================
 sub backup {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($val) = @_;
 	return $self->{backup} unless defined $val;
 	$self->{backup} = $val ? TRUE : FALSE;
@@ -126,7 +129,7 @@ sub backup {
 }
 #======================================================================
 sub debug {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($val) = @_;
 	return $self->{debug} unless defined $val;
 	$self->{debug} = $val ? TRUE : FALSE;
@@ -134,7 +137,7 @@ sub debug {
 }
 #======================================================================
 sub warnings {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($val) = @_;
 	return $self->{warnings} unless defined $val;
 	$self->{warnings} = $val ? TRUE : FALSE;
@@ -144,11 +147,13 @@ sub warnings {
 *del_user = { };
 *del_user = \&del;
 sub del { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	unless(scalar @_){
 		carp(q|Method/function "del" cannot run without params!|) if $self->warnings();
 		return;
 	}
+	
+	$self->_do_backup() if $self->backup();
 	
 	my $regexp = '^'.join('$|^',@_).'$';
 	$regexp = qr/$regexp/;
@@ -202,7 +207,7 @@ sub del {
 }
 #======================================================================
 sub _set {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	return if scalar @_ < 4;
 	my ($file, $user, $pos, $val, $count) = @_;
 	
@@ -238,7 +243,7 @@ sub _set {
 }
 #======================================================================
 sub _get {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	return if scalar @_ != 3;
 	my ($file, $user, $pos) = @_;
 	
@@ -258,7 +263,7 @@ sub _get {
 }
 #======================================================================
 sub uid { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 2);
 	}elsif(scalar @_ != 2){
@@ -269,7 +274,7 @@ sub uid {
 }
 #======================================================================
 sub gid {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 3);
 	}elsif(scalar @_ != 2){
@@ -280,7 +285,7 @@ sub gid {
 }
 #======================================================================
 sub gecos {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 4);
 	}elsif(scalar @_ != 2){
@@ -291,7 +296,7 @@ sub gecos {
 }
 #======================================================================
 sub home { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 5);
 	}elsif(scalar @_ != 2){
@@ -302,7 +307,7 @@ sub home {
 }
 #======================================================================
 sub shell { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 6);
 	}elsif(scalar @_ != 2){
@@ -313,7 +318,7 @@ sub shell {
 }
 #======================================================================
 sub passwd { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	if(scalar @_ == 1){
 		return $self->_get($self->shadow_file(), $_[0], 1);
 	}elsif(scalar @_ != 2){
@@ -324,7 +329,7 @@ sub passwd {
 }
 #======================================================================
 sub rename { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	
 	if(scalar @_ != 2){ 
 		carp(q/Incorrect parameters for "rename"!/) if $self->warnings(); 
@@ -342,7 +347,9 @@ sub rename {
 		carp(qq/Cannot retrieve GID of user "$user"! Leaving unchanged.../) if $self->warnings(); 
 		return; 
 	}
-
+	
+	$self->_do_backup() if $self->backup();
+	
 	my $tmp = $self->group_file.'.tmp';
 	open(my $fh, '<', $self->group_file());
 	open(my $ch, '>', $tmp);
@@ -360,6 +367,7 @@ sub rename {
 }
 #======================================================================
 sub maxgid {
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my $max = 0;
 	open(my $fh, '<', $self->passwd_file());
 	while(<$fh>){
@@ -371,6 +379,7 @@ sub maxgid {
 }
 #======================================================================
 sub maxuid {
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my $max = 0;
 	open(my $fh, '<', $self->passwd_file());
 	while(<$fh>){
@@ -382,7 +391,7 @@ sub maxuid {
 }
 #======================================================================
 sub _exists {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	return if scalar @_ != 3;
 	my ($file, $pos, $val) = @_;
 	
@@ -395,7 +404,7 @@ sub _exists {
 }
 #======================================================================
 sub exists_user {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($user) = @_;
 	unless($_CHECK->{rename}($user)){ 
 		carp(qq/Incorrect user "$user"!/) if $self->warnings(); 
@@ -405,7 +414,7 @@ sub exists_user {
 }
 #======================================================================
 sub exists_group {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($group) = @_;
 	unless($_CHECK->{rename}($group)){ 
 		carp(qq/Incorrect group "$group"!/) if $self->warnings(); 
@@ -415,7 +424,7 @@ sub exists_group {
 }
 #======================================================================
 sub user { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my (@user) = @_;
 	
 	unless($_CHECK->{rename}($user[0])){ 
@@ -443,6 +452,8 @@ sub user {
 			return; 
 		}
 	}
+	
+	$self->_do_backup() if $self->backup();
 	
 	my $passwd = splice @user,1, 1, 'x';
 	
@@ -474,6 +485,7 @@ sub user {
 }
 #======================================================================
 sub users { 
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my @a;
 	open(my $fh, '<', $self->passwd_file());
 	push @a, (split(/:/,$_))[0] while <$fh>;
@@ -482,6 +494,7 @@ sub users {
 }
 #======================================================================
 sub users_from_shadow { 
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my @a;
 	open(my $fh, '<', $self->shadow_file());
 	push @a, (split(/:/,$_))[0] while <$fh>;
@@ -490,12 +503,14 @@ sub users_from_shadow {
 }
 #======================================================================
 sub del_group {
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($group) = @_;
 	unless($_CHECK->{rename}($group)){ 
 		carp(qq/Incorrect group "$group"!/) if $self->warnings(); 
 		return; 
 	}
+	
+	$self->_do_backup() if $self->backup();
 	
 	my @dels;
 	my $tmp = $self->group_file.'.tmp';
@@ -514,7 +529,7 @@ sub del_group {
 }
 #======================================================================
 sub group { 
-	shift if $_[0] =~ __PACKAGE__;
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($group, $gid, $users) = @_;
 	unless($_CHECK->{rename}($group)){ 
 		carp(qq/Incorrect group "$group"!/) if $self->warnings(); 
@@ -522,6 +537,8 @@ sub group {
 	}
 	
 	if(scalar @_ == 3){
+		$self->_do_backup() if $self->backup();
+		
 		unless($_CHECK->{gid}($gid)){ 
 			carp(qq/Incorrect GID "$gid"!/) if $self->warnings(); 
 			return; 
@@ -567,6 +584,7 @@ sub group {
 }
 #======================================================================
 sub groups { 
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my @a;
 	open(my $fh, '<', $self->group_file());
 	push @a, (split(/:/,$_))[0] while <$fh>;
@@ -629,7 +647,7 @@ what is necessary in modern systems like Sun Solaris 10 or Linux).
 
 =over 4
 
-=item B<new( [ param0 => TRUE, param1 => FALSE...)>
+=item B<new( [ param0 => 1, param1 => 0... ] )>
 
 Constructor. Possible parameters are:
 
@@ -641,11 +659,12 @@ Constructor. Possible parameters are:
 
 =item B<group> - path to group file; default C</etc/group>
 
-=item B<backup> - boolean; if set to TRUE, backup will be made; default TRUE
+=item B<backup> - boolean; if set to C<1>, backup will be made; default C<1>
 
-=item B<warnings> - boolean; if set to TRUE, important warnings will be displayed; default FALSE
+=item B<warnings> - boolean; if set to C<1>, important warnings will be displayed; default C<0>
 
 =back
+
 
 =item B<check_sanity()>
 
@@ -673,7 +692,7 @@ This method will encrypt plain text into unix style MD5 password.
 =item B<gecos( USERNAME [,GECOS] )>
 
 Read or modify a user's GECOS string (typically their full name). 
-Returns the result of operation (TRUE or FALSE) if GECOS was specified. 
+Returns the result of operation (C<1> or C<undef>) if GECOS was specified. 
 Otherwhise returns the GECOS.
 
 =item B<gid( USERNAME [,GID] )>
@@ -684,7 +703,7 @@ FALSE) if GID was specified otherwhise returns the GID.
 =item B<home( USERNAME [,HOMEDIR] )>
 
 Read or modify a user's home directory. Returns the result of operation 
-(TRUE or FALSE) if HOMEDIR was specified otherwhise returns the HOMEDIR.
+(C<1> or C<undef>) if HOMEDIR was specified otherwhise returns the HOMEDIR.
 
 =item B<maxuid( )>
 
@@ -698,7 +717,7 @@ This method returns the maximum GID in use by all groups.
 
 Read or modify a user's password. If you have a plaintext password, 
 use the encpass method to encrypt it before passing it to this method. 
-Returns the result of operation (TRUE or FALSE) if PASSWD was specified. 
+Returns the result of operation (C<1> or C<undef>) if PASSWD was specified. 
 Otherwhise returns the PASSWD.
 
 =item B<rename( OLDNAME, NEWNAME )>
@@ -792,7 +811,9 @@ None. I hope.
 
 =head1 THANKS
 
-BIG thanks to Artem Russakovskii for reporting a bug.
+=item Thanks to Foudil BRÉTEL for some remarks, suggestions as well as supplying relevant patch!
+
+=item BIG thanks to Artem Russakovskii for reporting a bug.
 
 =head1 AUTHOR
 
