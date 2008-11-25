@@ -1,5 +1,8 @@
 Revision history for Perl extension Passwd::Unix.
 
+0.42   Tue, 25 Nov 2008 20:53:52 +0100
+	- Fixed bug in 'group' method. Thanks to piaff33z.
+
 0.41   Thu May 27 23:40:55 CEST 2008
 	- Added option for many instances. Thanks to Foudil BRÉTEL for some remarks, suggestions as well as supplying relevant patch!
 

@@ -3,8 +3,8 @@ NAME
 
 SYNOPSIS
             use Passwd::Unix;
-        
-            my $pu = Passwd::Unix->new();
+            
+        my $pu = Passwd::Unix->new();
             my $err = $pu->user("example", $pu->encpass("my_secret"), $pu->maxuid + 1, 10,
                                                     "My User", "/home/example", "/bin/bash" );
             $pu->passwd("example", $pu->encpass("newsecret"));
@@ -21,8 +21,8 @@ SYNOPSIS
                                     home shell passwd rename maxgid maxuid exists_user 
                                     exists_group user users users_from_shadow del_group 
                                     group groups);
-        
-            my $err = user( "example", encpass("my_secret"), $pu->maxuid + 1, 10,
+            
+        my $err = user( "example", encpass("my_secret"), $pu->maxuid + 1, 10,
                                             "My User", "/home/example", "/bin/bash" );
             passwd("example",encpass("newsecret"));
             foreach my $user (users()) {
@@ -168,12 +168,13 @@ BUGS AND LIMITATIONS
     None. I hope.
 
 THANKS
+    Thanks to 'piaff33z' for reporting a little bug in "group" method.
     Thanks to Foudil BRÉTEL for some remarks, suggestions as well as
     supplying relevant patch!
     BIG thanks to Artem Russakovskii for reporting a bug.
 
 AUTHOR
-    Strzelecki Łukasz <strzelec@rswsystems.com>
+    Strzelecki Lukasz <strzelec@rswsystems.com>
 
 LICENCE AND COPYRIGHT
     This program is free software; you can redistribute it and/or modify it

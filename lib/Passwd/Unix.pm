@@ -13,7 +13,7 @@ use File::Basename qw(dirname basename);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.41';
+$VERSION = '0.42';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -571,13 +571,31 @@ sub group {
 		close($fh);close($ch);
 		move($tmp, $self->group_file());
 	}else{
+		my ($gid, @users);
 		open(my $fh, '<', $self->group_file());
 		while(my $line = <$fh>){
 			chomp $line;
-			my ($name, $passwd, $id, $usrs) = split(/:/,$line,4);
+			my ($name, undef, $id, $usrs) = split(/:/,$line,4);
 			next if $group ne $name;
-			return $id, [ split(/\s*,\s*/o, $usrs) ]; 
+			$gid = $id;
+			$usrs =~ s/\s+$//o;
+			push @users, split(/\s*,\s*/o, $usrs) if $usrs;
+			last;
 		}
+			
+		open($fh, '<', $self->passwd_file());
+		while(my $line = <$fh>){
+			my ($login, undef, undef, $id) = split(/:/,$line,5);
+			next if $id != $gid;
+			push @users, $login;
+		}
+
+		@users = sort @users;
+		for(reverse 0..$#users){
+			last if $_ == 0;
+			splice @users, $_, 1 if $users[$_] eq $users[ $_ - 1 ];
+		}
+		return $gid, \@users;
 	}
 	
 	return;
@@ -811,13 +829,19 @@ None. I hope.
 
 =head1 THANKS
 
+=over 4
+
+=item Thanks to 'piaff33z' for reporting a little bug in C<group> method.
+
 =item Thanks to Foudil BRÉTEL for some remarks, suggestions as well as supplying relevant patch!
 
 =item BIG thanks to Artem Russakovskii for reporting a bug.
 
+=back
+
 =head1 AUTHOR
 
-Strzelecki Łukasz <strzelec@rswsystems.com>
+Strzelecki Lukasz <strzelec@rswsystems.com>
 
 =head1 LICENCE AND COPYRIGHT
 
