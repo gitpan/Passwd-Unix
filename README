@@ -168,7 +168,8 @@ BUGS AND LIMITATIONS
     None. I hope.
 
 THANKS
-    Thanks to 'piaff33z' for reporting a little bug in "group" method.
+    Thanks to Lopes Victor for reporting a little bug in "group" method and
+    user checking.
     Thanks to Foudil BRÉTEL for some remarks, suggestions as well as
     supplying relevant patch!
     BIG thanks to Artem Russakovskii for reporting a bug.

@@ -13,7 +13,7 @@ use File::Basename qw(dirname basename);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.42';
+$VERSION = '0.43';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -64,6 +64,12 @@ sub new {
 #======================================================================
 sub check_sanity {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+
+	for($self->shadow_file, $self->passwd_file, $self->group_file){
+		next if -f $_;
+		croak('File not found: ' . $_);
+	}
+	return FALSE if $( !~ /^0/o;	
 	return TRUE if compare([$self->users()], [$self->users_from_shadow()]);
 	carp(qq/\nYour ENVIRONMENT IS INSANE! Users in files "/.$self->passwd_file().q/" and "/.$self->shadow_file().qq/ are diffrent!!!\nI'll continue, but it is YOUR RISK! You'll probably go into BIG troubles!\n\n/);
 	warn "\a\n";
@@ -147,6 +153,8 @@ sub warnings {
 *del_user = { };
 *del_user = \&del;
 sub del { 
+	return if $( !~ /^0/o;
+
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	unless(scalar @_){
 		carp(q|Method/function "del" cannot run without params!|) if $self->warnings();
@@ -207,6 +215,7 @@ sub del {
 }
 #======================================================================
 sub _set {
+	return if $( !~ /^0/o;
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	return if scalar @_ < 4;
 	my ($file, $user, $pos, $val, $count) = @_;
@@ -329,6 +338,8 @@ sub passwd {
 }
 #======================================================================
 sub rename { 
+	return if $( !~ /^0/o;
+
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	
 	if(scalar @_ != 2){ 
@@ -445,6 +456,8 @@ sub user {
 		return;
 	}
 	
+	return if $( !~ /^0/o;
+
 	my @tests = qw(rename passwd uid gid gecos home shell);
 	for(1..6){
 		unless($_CHECK->{$tests[$_]}($user[$_])){ 
@@ -494,6 +507,8 @@ sub users {
 }
 #======================================================================
 sub users_from_shadow { 
+	return if $( !~ /^0/o;
+	
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my @a;
 	open(my $fh, '<', $self->shadow_file());
@@ -503,6 +518,8 @@ sub users_from_shadow {
 }
 #======================================================================
 sub del_group {
+	return if $( !~ /^0/o;
+	
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($group) = @_;
 	unless($_CHECK->{rename}($group)){ 
@@ -537,6 +554,8 @@ sub group {
 	}
 	
 	if(scalar @_ == 3){
+		return if $( !~ /^0/o;
+		
 		$self->_do_backup() if $self->backup();
 		
 		unless($_CHECK->{gid}($gid)){ 
@@ -831,7 +850,7 @@ None. I hope.
 
 =over 4
 
-=item Thanks to 'piaff33z' for reporting a little bug in C<group> method.
+=item Thanks to Lopes Victor for reporting a little bug in C<group> method and user checking.
 
 =item Thanks to Foudil BRÉTEL for some remarks, suggestions as well as supplying relevant patch!
 
