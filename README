@@ -121,11 +121,12 @@ SUBROUTINES/METHODS
 
     group( GROUPNAME [,GID, ARRAYREF] )
         This method can add, modify, or return information about a group.
-        Supplied with a single groupname parameter, it will return a three
+        Supplied with a single groupname parameter, it will return a two
         element list consisting of (GID, ARRAYREF), where ARRAYREF is a ref
-        to array consisting names of users in this GROUP, or undef if no
-        such group exists. If you supply all three parameters, the named
-        group will be created or modified if it already exists.
+        to array consisting names of users in this GROUP. It will return
+        undef and ref to empty array ("undef, [ ]") if no such group exists.
+        If you supply all three parameters, the named group will be created
+        or modified if it already exists.
 
     users()
         This method returns a list of all existing usernames.
@@ -168,8 +169,8 @@ BUGS AND LIMITATIONS
     None. I hope.
 
 THANKS
-    Thanks to Lopes Victor for reporting a little bug in "group" method and
-    user checking.
+    BIG THANKS to Lopes Victor for reporting some bugs and his exact
+    sugesstions :-)
     Thanks to Foudil BRÉTEL for some remarks, suggestions as well as
     supplying relevant patch!
     BIG thanks to Artem Russakovskii for reporting a bug.

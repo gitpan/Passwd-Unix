@@ -13,7 +13,7 @@ use File::Basename qw(dirname basename);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.43';
+$VERSION = '0.44';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -31,7 +31,7 @@ use constant GROUP  	=> '/etc/group';
 use constant BACKUP 	=> TRUE;
 use constant DEBUG  	=> FALSE;
 use constant WARNINGS 	=> FALSE;
-use constant PATH		=>  qr  /^[\w\+_\040\#\(\)\{\}\[\]\/\-\^,\.:;&%@\\~]+\$?$/;
+use constant PATH		=>  qr/^[\w\+_\040\#\(\)\{\}\[\]\/\-\^,\.:;&%@\\~]+\$?$/;
 #======================================================================
 my $_CHECK = {
 	rename 	=> sub { return if not defined $_[0] or $_[0] !~ /^[A-Z0-9_-]+$/io; TRUE },
@@ -57,23 +57,31 @@ sub new {
 				warnings	=> (defined $params{warnings} 	? $params{warnings} : WARNINGS	),
 			}, $class;
 			
-	$self->check_sanity();
+	$self->check_sanity(TRUE);
 			
 	return $self;
 }
 #======================================================================
 sub check_sanity {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	my $quiet = shift;
 
 	for($self->shadow_file, $self->passwd_file, $self->group_file){
 		next if -f $_;
 		croak('File not found: ' . $_);
 	}
-	return FALSE if $( !~ /^0/o;	
-	return TRUE if compare([$self->users()], [$self->users_from_shadow()]);
-	carp(qq/\nYour ENVIRONMENT IS INSANE! Users in files "/.$self->passwd_file().q/" and "/.$self->shadow_file().qq/ are diffrent!!!\nI'll continue, but it is YOUR RISK! You'll probably go into BIG troubles!\n\n/);
-	warn "\a\n";
-	sleep 5;
+
+	if($( !~ /^0/o){
+		carp(q/Running as "/ . getlogin() . qq/", which has currently no permissions to write to system files. READ ONLY mode ENABLED!\n/) unless $quiet;
+		return;
+	}
+
+	unless(compare([$self->users()], [$self->users_from_shadow()])){
+		carp(qq/\nYour ENVIRONMENT IS INSANE! Users in files "/.$self->passwd_file().q/" and "/.$self->shadow_file().qq/ are diffrent!!!\nI'll continue, but it is YOUR RISK! You'll probably go into BIG troubles!\n\n/);
+		warn "\a\n";
+		sleep 5;
+	}
+
 	return;
 }
 #======================================================================
@@ -601,7 +609,10 @@ sub group {
 			push @users, split(/\s*,\s*/o, $usrs) if $usrs;
 			last;
 		}
-			
+		
+		# if searched ground does not exist
+		return undef, [ ] unless defined $gid;
+	
 		open($fh, '<', $self->passwd_file());
 		while(my $line = <$fh>){
 			my ($login, undef, undef, $id) = split(/:/,$line,5);
@@ -784,9 +795,9 @@ the named user will be created or modified if it already exists.
 =item B<group( GROUPNAME [,GID, ARRAYREF] )>
 
 This method can add, modify, or return information about a group. 
-Supplied with a single groupname parameter, it will return a three element 
+Supplied with a single groupname parameter, it will return a two element 
 list consisting of (GID, ARRAYREF), where ARRAYREF is a ref to array 
-consisting names of users in this GROUP, or undef if no such group 
+consisting names of users in this GROUP. It will return undef and ref to empty array (C<undef, [ ]>) if no such group 
 exists. If you supply all three parameters, the named group will be 
 created or modified if it already exists.
 
@@ -844,13 +855,13 @@ None known.
 
 =head1 BUGS AND LIMITATIONS
 
-None. I hope.
+None. I hope. 
 
 =head1 THANKS
 
 =over 4
 
-=item Thanks to Lopes Victor for reporting a little bug in C<group> method and user checking.
+=item BIG THANKS to Lopes Victor for reporting some bugs and his exact sugesstions :-)
 
 =item Thanks to Foudil BRÉTEL for some remarks, suggestions as well as supplying relevant patch!
 
