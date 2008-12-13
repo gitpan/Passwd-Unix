@@ -7,13 +7,13 @@ use strict;
 use Carp;
 use File::Spec;
 use File::Path;
-use File::Copy;
+use IO::Compress::Bzip2;
 use Struct::Compare;
 use File::Basename qw(dirname basename);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.44';
+$VERSION = '0.45';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -57,7 +57,7 @@ sub new {
 				warnings	=> (defined $params{warnings} 	? $params{warnings} : WARNINGS	),
 			}, $class;
 			
-	$self->check_sanity(TRUE);
+	$self->check_sanity(TRUE) if (caller())[0] ne __PACKAGE__;
 			
 	return $self;
 }
@@ -103,11 +103,36 @@ sub encpass {
 sub _do_backup {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($sec,$min,$hour,$mday,$mon,$year) = localtime(time);
-	my $dir = File::Spec->catfile($self->passwd_file.'.bak', ($year+1900).'.'.$mon.'.'.$mday.'-'.$hour.'.'.$min.'.'.$sec);
-	mkpath $dir;
-	copy($self->passwd_file(), File::Spec->catfile($dir, basename($self->passwd_file())));
-	copy($self->shadow_file(), File::Spec->catfile($dir, basename($self->shadow_file())));
-	copy($self->group_file(), File::Spec->catfile($dir, basename($self->group_file())));
+
+	my $dir = File::Spec->catfile($self->passwd_file.'.bak', ($year+1900).'.'.($mon+1).'.'.$mday.'-'.$hour.'.'.$min.'.'.$sec);
+	mkpath $dir; chmod 0700, $dir;
+
+	my $cpasswd	= File::Spec->catfile($dir, basename($self->passwd_file()) . q/.bz2/);
+	my $cshadow	= File::Spec->catfile($dir, basename($self->shadow_file()) . q/.bz2/);
+	my $cgroup	= File::Spec->catfile($dir, basename($self->group_file())  . q/.bz2/);
+
+	# passwd
+	my $compress = IO::Compress::Bzip2->new($cpasswd, AutoClose => 1, Append => 1, BlockSize100K => 9);
+	open(my $fh, '<', $self->passwd_file) or return;
+	$compress->print($_) while <$fh>;
+	$compress->close;
+	chmod 0644, $cpasswd;
+
+	# shadow
+	$compress = IO::Compress::Bzip2->new($cshadow, AutoClose => 1, Append => 1, BlockSize100K => 9);
+	open($fh, '<', $self->shadow_file) or return;
+	$compress->print($_) while <$fh>;
+	$compress->close;
+	chmod 0400, $cshadow;
+	
+	# group
+	$compress = IO::Compress::Bzip2->new($cgroup, AutoClose => 1, Append => 1, BlockSize100K => 9);
+	open($fh, '<', $self->group_file) or return;
+	$compress->print($_) while <$fh>;
+	$compress->close;
+	chmod 0644, $cgroup;
+
+	return;
 }
 #======================================================================
 sub passwd_file { 
