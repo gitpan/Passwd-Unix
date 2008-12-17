@@ -7,13 +7,14 @@ use strict;
 use Carp;
 use File::Spec;
 use File::Path;
+use File::Copy;
 use IO::Compress::Bzip2;
 use Struct::Compare;
 use File::Basename qw(dirname basename);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.45';
+$VERSION = '0.46';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -107,30 +108,33 @@ sub _do_backup {
 	my $dir = File::Spec->catfile($self->passwd_file.'.bak', ($year+1900).'.'.($mon+1).'.'.$mday.'-'.$hour.'.'.$min.'.'.$sec);
 	mkpath $dir; chmod 0700, $dir;
 
-	my $cpasswd	= File::Spec->catfile($dir, basename($self->passwd_file()) . q/.bz2/);
-	my $cshadow	= File::Spec->catfile($dir, basename($self->shadow_file()) . q/.bz2/);
-	my $cgroup	= File::Spec->catfile($dir, basename($self->group_file())  . q/.bz2/);
+	my $passwd = $self->passwd_file();
+	my $shadow = $self->shadow_file();
+	my $group  = $self->group_file();
+	my $cpasswd	= File::Spec->catfile($dir, basename($passwd) . q/.bz2/);
+	my $cshadow	= File::Spec->catfile($dir, basename($shadow) . q/.bz2/);
+	my $cgroup	= File::Spec->catfile($dir, basename($group)  . q/.bz2/);
 
 	# passwd
 	my $compress = IO::Compress::Bzip2->new($cpasswd, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open(my $fh, '<', $self->passwd_file) or return;
+	open(my $fh, '<', $passwd) or return;
 	$compress->print($_) while <$fh>;
 	$compress->close;
-	chmod 0644, $cpasswd;
+	chmod 0644, $passwd, $cpasswd;
 
 	# shadow
 	$compress = IO::Compress::Bzip2->new($cshadow, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open($fh, '<', $self->shadow_file) or return;
+	open($fh, '<', $shadow) or return;
 	$compress->print($_) while <$fh>;
 	$compress->close;
-	chmod 0400, $cshadow;
+	chmod 0400, $shadow, $cshadow;
 	
 	# group
 	$compress = IO::Compress::Bzip2->new($cgroup, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open($fh, '<', $self->group_file) or return;
+	open($fh, '<', $group) or return;
 	$compress->print($_) while <$fh>;
 	$compress->close;
-	chmod 0644, $cgroup;
+	chmod 0644, $group, $cgroup;
 
 	return;
 }
@@ -265,7 +269,13 @@ sub _set {
 	$count ||= 6;
 	my $tmp = $file.'.tmp';
 	open(my $fh, '<', $file);
+
+	my $mode = (stat($file))[2];	
 	open(my $ch, '>', $tmp);
+	close($ch);
+	chmod $mode, $tmp;
+
+	open($ch, '>', $tmp);
 	my $ret;
 	while(<$fh>){
 		chomp;
