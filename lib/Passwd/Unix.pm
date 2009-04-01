@@ -8,40 +8,41 @@ use Carp;
 use File::Spec;
 use File::Path;
 use File::Copy;
+use File::Basename qw(dirname basename);
 use IO::Compress::Bzip2;
 use Struct::Compare;
-use File::Basename qw(dirname basename);
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.46';
+$VERSION = '0.47';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
 				gecos home shell passwd rename maxgid maxuid exists_user 
 				exists_group user users users_from_shadow del_group 
-				group groups);
+				group groups groups_from_gshadow);
 #======================================================================
 use constant TRUE 	=> not undef;
 use constant FALSE 	=> undef;
 #======================================================================
 use constant DAY		=> 86400;
 use constant PASSWD 	=> '/etc/passwd';
-use constant SHADOW 	=> '/etc/shadow';
 use constant GROUP  	=> '/etc/group';
+use constant SHADOW 	=> '/etc/shadow';
+use constant GSHADOW  	=> '/etc/gshadow';
 use constant BACKUP 	=> TRUE;
 use constant DEBUG  	=> FALSE;
 use constant WARNINGS 	=> FALSE;
 use constant PATH		=>  qr/^[\w\+_\040\#\(\)\{\}\[\]\/\-\^,\.:;&%@\\~]+\$?$/;
 #======================================================================
 my $_CHECK = {
-	rename 	=> sub { return if not defined $_[0] or $_[0] !~ /^[A-Z0-9_-]+$/io; TRUE },
-	gid		=> sub { return if not defined $_[0] or $_[0] !~ /^[0-9]+$/o; TRUE },
-	uid		=> sub { return if not defined $_[0] or $_[0] !~ /^[0-9]+$/o; TRUE },
-	home	=> sub { return if not defined $_[0] or $_[0] !~ PATH; TRUE },
-	shell	=> sub { return if not defined $_[0] or $_[0] !~ PATH; TRUE },
-	gecos	=> sub { return if not defined $_[0] or $_[0] !~ /^[^:]+$/o; TRUE },
-	passwd 	=> sub { return if not defined $_[0]; TRUE},
+	'rename' 	=> sub { return if not defined $_[0] or $_[0] !~ /^[A-Z0-9_-]+$/io; TRUE },
+	'gid'		=> sub { return if not defined $_[0] or $_[0] !~ /^[0-9]+$/o; TRUE },
+	'uid'		=> sub { return if not defined $_[0] or $_[0] !~ /^[0-9]+$/o; TRUE },
+	'home'		=> sub { return if not defined $_[0] or $_[0] !~ PATH; TRUE },
+	'shell'		=> sub { return if not defined $_[0] or $_[0] !~ PATH; TRUE },
+	'gecos'		=> sub { return if not defined $_[0] or $_[0] !~ /^[^:]+$/o; TRUE },
+	'passwd' 	=> sub { return if not defined $_[0]; TRUE},
 };
 #======================================================================
 my $Self = __PACKAGE__->new();
@@ -51,8 +52,9 @@ sub new {
 	
 	my $self = bless {
 				passwd 		=> (defined $params{passwd} 	? $params{passwd} 	: PASSWD	),
-				shadow 		=> (defined $params{shadow} 	? $params{shadow} 	: SHADOW	),
 				group 		=> (defined $params{group} 		? $params{group} 	: GROUP		),
+				shadow 		=> (defined $params{shadow} 	? $params{shadow} 	: SHADOW	),
+				gshadow 	=> (defined $params{gshadow} 	? $params{gshadow} 	: GSHADOW	),
 				backup 		=> (defined $params{backup} 	? $params{backup} 	: BACKUP	),
 				debug 		=> (defined $params{debug} 		? $params{debug} 	: DEBUG		),
 				warnings	=> (defined $params{warnings} 	? $params{warnings} : WARNINGS	),
@@ -88,9 +90,10 @@ sub check_sanity {
 #======================================================================
 sub reset {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
-	$self->{passwd} = PASSWD;
-	$self->{shadow} = SHADOW;
-	$self->{group}  = GROUP;
+	$self->{passwd}		= PASSWD;
+	$self->{group}		= GROUP;
+	$self->{shadow}		= SHADOW;
+	$self->{gshadow}	= GSHADOW;
 	return TRUE;
 }
 #======================================================================
@@ -108,33 +111,40 @@ sub _do_backup {
 	my $dir = File::Spec->catfile($self->passwd_file.'.bak', ($year+1900).'.'.($mon+1).'.'.$mday.'-'.$hour.'.'.$min.'.'.$sec);
 	mkpath $dir; chmod 0700, $dir;
 
-	my $passwd = $self->passwd_file();
-	my $shadow = $self->shadow_file();
-	my $group  = $self->group_file();
-	my $cpasswd	= File::Spec->catfile($dir, basename($passwd) . q/.bz2/);
-	my $cshadow	= File::Spec->catfile($dir, basename($shadow) . q/.bz2/);
-	my $cgroup	= File::Spec->catfile($dir, basename($group)  . q/.bz2/);
+	my $cpasswd		= File::Spec->catfile($dir, basename($self->passwd_file())  . q/.bz2/);
+	my $cgroup		= File::Spec->catfile($dir, basename($self->group_file())   . q/.bz2/);
+	my $cshadow		= File::Spec->catfile($dir, basename($self->shadow_file())  . q/.bz2/);
+	my $cgshadow	= File::Spec->catfile($dir, basename($self->gshadow_file()) . q/.bz2/);
 
 	# passwd
 	my $compress = IO::Compress::Bzip2->new($cpasswd, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open(my $fh, '<', $passwd) or return;
+	open(my $fh, '<', $self->passwd_file) or return;
 	$compress->print($_) while <$fh>;
 	$compress->close;
-	chmod 0644, $passwd, $cpasswd;
-
-	# shadow
-	$compress = IO::Compress::Bzip2->new($cshadow, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open($fh, '<', $shadow) or return;
-	$compress->print($_) while <$fh>;
-	$compress->close;
-	chmod 0400, $shadow, $cshadow;
+	chmod 0644, $cpasswd;
 	
 	# group
 	$compress = IO::Compress::Bzip2->new($cgroup, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open($fh, '<', $group) or return;
+	open($fh, '<', $self->group_file) or return;
 	$compress->print($_) while <$fh>;
 	$compress->close;
-	chmod 0644, $group, $cgroup;
+	chmod 0644, $cgroup;
+
+	# shadow
+	$compress = IO::Compress::Bzip2->new($cshadow, AutoClose => 1, Append => 1, BlockSize100K => 9);
+	open($fh, '<', $self->shadow_file) or return;
+	$compress->print($_) while <$fh>;
+	$compress->close;
+	chmod 0400, $cshadow;
+
+	# gshadow
+	$compress = IO::Compress::Bzip2->new($cgshadow, AutoClose => 1, Append => 1, BlockSize100K => 9);
+	open($fh, '<', $self->gshadow_file) or return;
+	$compress->print($_) while <$fh>;
+	$compress->close;
+	chmod 0400, $cgshadow;
+	
+	
 
 	return;
 }
@@ -147,6 +157,14 @@ sub passwd_file {
 	return $self->{passwd};
 }
 #======================================================================
+sub group_file { 
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	my ($val) = @_;
+	return $self->{group} unless defined $val;
+	$self->{group} = File::Spec->canonpath($val);
+	return $self->{group};
+}
+#======================================================================
 sub shadow_file { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($val) = @_;
@@ -155,12 +173,12 @@ sub shadow_file {
 	return $self->{shadow};
 }
 #======================================================================
-sub group_file { 
+sub gshadow_file { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($val) = @_;
-	return $self->{group} unless defined $val;
-	$self->{group} = File::Spec->canonpath($val);
-	return $self->{group};
+	return $self->{gshadow} unless defined $val;
+	$self->{gshadow} = File::Spec->canonpath($val);
+	return $self->{gshadow};
 }
 #======================================================================
 sub backup {
@@ -232,6 +250,7 @@ sub del {
 	move($tmp, $self->shadow_file());
 	
 	# remove from group
+	my @groups;
 	my $gids = '^'.join('$|^',@gids).'$';
 	$gids = qr/$gids/;
 	$tmp = $self->group_file.'.tmp';
@@ -241,12 +260,34 @@ sub del {
 		chomp $line;
 		my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
 		$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
-		next if $gid =~ $gids and not length $users;
+		#next if $gid =~ $gids and not length $users;
+		if($gid =~ $gids and not length $users){
+			push @groups, $name;
+			next;
+		}
 		print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
 	}
 	close($fh);close($ch);
 	move($tmp, $self->group_file());
 	
+	# remove from gshadow
+	if(-f $self->gshadow_file){
+		my $groups = '^'.join('$|^',@groups).'$';
+		$groups = qr/$groups/;
+		$tmp = $self->gshadow_file.'.tmp';
+		open($fh, '<', $self->gshadow_file());
+		open($ch, '>', $tmp);
+		while(my $line = <$fh>){
+			chomp $line;
+			my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
+			$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
+			next if $name =~ $groups and not length $users;
+			print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
+		}
+		close($fh);close($ch);
+		move($tmp, $self->gshadow_file());
+	}
+
 	return @deleted if wantarray;
 	return scalar @deleted;
 }
@@ -269,13 +310,7 @@ sub _set {
 	$count ||= 6;
 	my $tmp = $file.'.tmp';
 	open(my $fh, '<', $file);
-
-	my $mode = (stat($file))[2];	
 	open(my $ch, '>', $tmp);
-	close($ch);
-	chmod $mode, $tmp;
-
-	open($ch, '>', $tmp);
 	my $ret;
 	while(<$fh>){
 		chomp;
@@ -299,7 +334,7 @@ sub _get {
 	return if scalar @_ != 3;
 	my ($file, $user, $pos) = @_;
 	
-	unless($_CHECK->{rename}($user)){ 
+	unless($_CHECK->{'rename'}($user)){ 
 		carp(qq/Incorrect user "$user"!/) if $self->warnings(); 
 		return; 
 	}
@@ -415,7 +450,21 @@ sub rename {
 	}
 	close($fh);close($ch);
 	move($tmp, $self->group_file());
-		
+	
+	if(-f $self->gshadow_file){
+		my $tmp = $self->gshadow_file.'.tmp';
+		open(my $fh, '<', $self->gshadow_file());
+		open(my $ch, '>', $tmp);
+		while(my $line = <$fh>){
+			chomp $line;
+			my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
+			$users = join(q/,/, map { $_ eq $user ? $val : $_ } split(/\s*,\s*/, $users));
+			print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
+		}
+		close($fh);close($ch);
+		move($tmp, $self->gshadow_file());
+	}
+	
 	$self->_set($self->passwd_file(), $user, 0, $val);	
 	return $self->_set($self->shadow_file(), $user, 0, $val);
 }
@@ -584,6 +633,18 @@ sub del_group {
 	close($fh);close($ch);
 	move($tmp, $self->group_file());
 	
+	if(-f $self->gshadow_file){
+		my $tmp = $self->gshadow_file.'.tmp';
+		open(my $fh, '<', $self->gshadow_file());
+		open(my $ch, '>', $tmp);
+		while(my $line = <$fh>){
+			my ($name) = split(/:/,$line,2);
+			print $ch $line if $group ne $name;
+		}
+		close($fh);close($ch);
+		move($tmp, $self->gshadow_file());
+	}
+
 	return @dels if wantarray;
 	return scalar @dels;
 }
@@ -605,7 +666,9 @@ sub group {
 			carp(qq/Incorrect GID "$gid"!/) if $self->warnings(); 
 			return; 
 		}
-		unless(ref $users and ref $users eq 'ARRAY'){ 
+# 2009.03.30 - Thx to Jonas Genannt; will allow to add empty groups
+#		unless(ref $users and ref $users eq 'ARRAY'){ 
+		if(defined($users) && ref $users ne 'ARRAY' ){ 
 			carp(qq/Incorrect parameter "users"! It should be arrayref.../) if $self->warnings(); 
 			return; 
 		}
@@ -625,13 +688,31 @@ sub group {
 			chomp $line;
 			my ($name, $passwd) = split(/:/,$line,3);
 			if($group eq $name){ 
-				print $ch join(q/:/, $group, 'x', $gid, join(q/,/, @$users)),"\n"; 
+				print $ch join(q/:/, $group, $passwd, $gid, join(q/,/, @$users)),"\n"; 
 				$mod = TRUE;
 			} else{ print $ch $line,"\n"; }
 		}
 		print $ch join(q/:/, $group, 'x', $gid, join(q/,/, @$users)),"\n" unless $mod;
 		close($fh);close($ch);
 		move($tmp, $self->group_file());
+
+		if(-f $self->gshadow_file){
+			my $mod;
+			my $tmp = $self->gshadow_file.'.tmp';
+			open(my $fh, '<', $self->gshadow_file());
+			open(my $ch, '>', $tmp);
+			while(my $line = <$fh>){
+				chomp $line;
+				my ($name, $passwd) = split(/:/,$line,3);
+				if($group eq $name){ 
+					print $ch join(q/:/, $group, $passwd, q//, join(q/,/, @$users)),"\n"; 
+					$mod = TRUE;
+				} else{ print $ch $line,"\n"; }
+			}
+			print $ch join(q/:/, $group, '!', q//, join(q/,/, @$users)),"\n" unless $mod;
+			close($fh);close($ch);
+			move($tmp, $self->gshadow_file());
+		}
 	}else{
 		my ($gid, @users);
 		open(my $fh, '<', $self->group_file());
@@ -675,6 +756,15 @@ sub groups {
 	return @a;
 }
 #======================================================================
+sub groups_from_gshadow { 
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	my @a;
+	open(my $fh, '<', $self->gshadow_file()) or return;
+	push @a, (split(/:/,$_))[0] while <$fh>;
+	close($fh);
+	return @a;
+}
+#======================================================================
 1;
 
 =head1 NAME
@@ -701,7 +791,7 @@ Passwd::Unix
 				group_file backup warnings del del_user uid gid gecos
 				home shell passwd rename maxgid maxuid exists_user 
 				exists_group user users users_from_shadow del_group 
-				group groups);
+				group groups groups_from_gshadow);
 	
 	my $err = user( "example", encpass("my_secret"), $pu->maxuid + 1, 10,
 					"My User", "/home/example", "/bin/bash" );
@@ -741,6 +831,8 @@ Constructor. Possible parameters are:
 =item B<shadow> - path to shadow file; default C</etc/shadow>
 
 =item B<group> - path to group file; default C</etc/group>
+
+=item B<gshadow> - path to gshadow file if any; default C</etc/gshadow>
 
 =item B<backup> - boolean; if set to C<1>, backup will be made; default C<1>
 
@@ -840,9 +932,17 @@ created or modified if it already exists.
 
 This method returns a list of all existing usernames. 
 
+=item B<users_from_shadow()>
+
+This method returns a list of all existing usernames in a shadow file. 
+
 =item B<groups()>
 
 This method returns a list of all existing groups. 
+
+=item B<groups_from_gshadow()>
+
+This method returns a list of all existing groups in a gshadow file. 
 
 =item B<exists_user(USERNAME)>
 
@@ -865,6 +965,11 @@ Otherwise returns the current PATH.
 =item B<group_file([PATH])>
 
 This method, if called with an argument, sets path to the I<group> file.
+Otherwise returns the current PATH.
+
+=item B<gshadow_file([PATH])>
+
+This method, if called with an argument, sets path to the I<gshadow> file.
 Otherwise returns the current PATH.
 
 =item B<reset()>
@@ -895,6 +1000,8 @@ None. I hope.
 =head1 THANKS
 
 =over 4
+
+=item Thanks to Jonas Genannt for suggestions as well as supplying relevant patch! 
 
 =item BIG THANKS to Lopes Victor for reporting some bugs and his exact sugesstions :-)
 

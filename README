@@ -20,7 +20,7 @@ SYNOPSIS
                                     group_file backup warnings del del_user uid gid gecos
                                     home shell passwd rename maxgid maxuid exists_user 
                                     exists_group user users users_from_shadow del_group 
-                                    group groups);
+                                    group groups groups_from_gshadow);
             
         my $err = user( "example", encpass("my_secret"), $pu->maxuid + 1, 10,
                                             "My User", "/home/example", "/bin/bash" );
@@ -50,6 +50,7 @@ SUBROUTINES/METHODS
         passwd - path to passwd file; default "/etc/passwd"
         shadow - path to shadow file; default "/etc/shadow"
         group - path to group file; default "/etc/group"
+        gshadow - path to gshadow file if any; default "/etc/gshadow"
         backup - boolean; if set to 1, backup will be made; default 1
         warnings - boolean; if set to 1, important warnings will be
         displayed; default 0
@@ -131,8 +132,15 @@ SUBROUTINES/METHODS
     users()
         This method returns a list of all existing usernames.
 
+    users_from_shadow()
+        This method returns a list of all existing usernames in a shadow
+        file.
+
     groups()
         This method returns a list of all existing groups.
+
+    groups_from_gshadow()
+        This method returns a list of all existing groups in a gshadow file.
 
     exists_user(USERNAME)
         This method checks if specified user exists. It returns TRUE or
@@ -154,6 +162,10 @@ SUBROUTINES/METHODS
         This method, if called with an argument, sets path to the *group*
         file. Otherwise returns the current PATH.
 
+    gshadow_file([PATH])
+        This method, if called with an argument, sets path to the *gshadow*
+        file. Otherwise returns the current PATH.
+
     reset()
         This method sets paths to files *passwd*, *shadow*, *group* to the
         default values.
@@ -169,6 +181,8 @@ BUGS AND LIMITATIONS
     None. I hope.
 
 THANKS
+    Thanks to Jonas Genannt for suggestions as well as supplying relevant
+    patch!
     BIG THANKS to Lopes Victor for reporting some bugs and his exact
     sugesstions :-)
     Thanks to Foudil BRÉTEL for some remarks, suggestions as well as
