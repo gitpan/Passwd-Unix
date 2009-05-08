@@ -14,7 +14,7 @@ use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.48';
+$VERSION = '0.481';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -894,7 +894,7 @@ system critical files in /etc/dir.
 
 The Passwd::Unix module provides an abstract interface to /etc/passwd, 
 /etc/shadow and /etc/group format files. It is inspired by 
-Unix::PasswdFile module (this one does not handle /etc/shadow file, 
+Unix::PasswdFile module (that one does not handle /etc/shadow file, 
 what is necessary in modern systems like Sun Solaris 10 or Linux).
 
 =head1 SUBROUTINES/METHODS

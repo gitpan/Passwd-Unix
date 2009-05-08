@@ -40,7 +40,7 @@ ABSTRACT
 DESCRIPTION
     The Passwd::Unix module provides an abstract interface to /etc/passwd,
     /etc/shadow and /etc/group format files. It is inspired by
-    Unix::PasswdFile module (this one does not handle /etc/shadow file, what
+    Unix::PasswdFile module (that one does not handle /etc/shadow file, what
     is necessary in modern systems like Sun Solaris 10 or Linux).
 
 SUBROUTINES/METHODS
