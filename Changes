@@ -1,5 +1,8 @@
 Revision history for Perl extension Passwd::Unix.
 
+0.5   Sat, 09 May 2009 03:10:16 +0200
+	- Fixed some typos.
+
 0.481  Fri, 08 May 2009 23:40:33 +0200
 	- Little changes in a documentation.
 

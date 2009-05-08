@@ -14,7 +14,7 @@ use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.481';
+$VERSION = '0.5';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -34,9 +34,9 @@ use constant BACKUP 	=> TRUE;
 use constant DEBUG  	=> FALSE;
 use constant WARNINGS 	=> FALSE;
 use constant UMASK		=> 0022;
-use constant UMASK_PWD	=> 0644;
-use constant UMASK_GRP	=> 0644;
-use constant UMASK_SHD	=> 0400;
+use constant PERM_PWD	=> 0644;
+use constant PERM_GRP	=> 0644;
+use constant PERM_SHD	=> 0400;
 use constant PATH		=>  qr/^[\w\+_\040\#\(\)\{\}\[\]\/\-\^,\.:;&%@\\~]+\$?$/;
 #======================================================================
 my $_CHECK = {
@@ -80,10 +80,10 @@ sub check_sanity {
 	}
 
 	unless($quiet){
-		carp(q/Insecure permissions to group file!/)	and sleep(1) if ((stat($self->group_file)  )[2] & 07777) != UMASK_GRP;
-		carp(q/Insecure permissions to passwd file!/)	and sleep(1) if ((stat($self->passwd_file) )[2] & 07777) != UMASK_PWD;
-		carp(q/Insecure permissions to shadow file!/)	and sleep(1) if ((stat($self->shadow_file) )[2] & 07777) != UMASK_SHD;
-		carp(q/Insecure permissions to gshadow file!/)	and sleep(1) if ((stat($self->gshadow_file))[2] & 07777) != UMASK_GRP;
+		carp(q/Insecure permissions to group file!/)	and sleep(1) if ((stat($self->group_file)  )[2] & 07777) != PERM_GRP;
+		carp(q/Insecure permissions to passwd file!/)	and sleep(1) if ((stat($self->passwd_file) )[2] & 07777) != PERM_PWD;
+		carp(q/Insecure permissions to shadow file!/)	and sleep(1) if ((stat($self->shadow_file) )[2] & 07777) != PERM_SHD;
+		carp(q/Insecure permissions to gshadow file!/)	and sleep(1) if ((stat($self->gshadow_file))[2] & 07777) != PERM_GRP;
 	}
 
 	if($( !~ /^0/o){
@@ -262,7 +262,7 @@ sub del {
 	my $tmp = $self->passwd_file.'.tmp';
 	open(my $fh, '<', $self->passwd_file());
 	open(my $ch, '>', $tmp);
-	chmod UMASK_PWD, $ch;
+	chmod PERM_PWD, $ch;
 	while(my $line = <$fh>){
 		my ($user, undef, undef, $gid) = split(/:/,$line, 5);
 		if($user =~ $regexp){ 
@@ -280,7 +280,7 @@ sub del {
 	$tmp = $self->shadow_file.'.tmp';
 	open($fh, '<', $self->shadow_file());
 	open($ch, '>', $tmp);
-	chmod UMASK_SHD, $ch;
+	chmod PERM_SHD, $ch;
 	while(my $line = <$fh>){
 		next if (split(/:/,$line,2))[0] =~ $regexp;
 		print $ch $line;
@@ -299,7 +299,7 @@ sub del {
 #	$tmp = $self->group_file.'.tmp';
 #	open($fh, '<', $self->group_file());
 #	open($ch, '>', $tmp);
-#	chmod UMASK_GRP, $ch;
+#	chmod PERM_GRP, $ch;
 #	while(my $line = <$fh>){
 #		chomp $line;
 #		my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
@@ -321,7 +321,7 @@ sub del {
 #		$tmp = $self->gshadow_file.'.tmp';
 #		open($fh, '<', $self->gshadow_file());
 #		open($ch, '>', $tmp);
-#		chmod UMASK_SHD, $ch;
+#		chmod PERM_SHD, $ch;
 #		while(my $line = <$fh>){
 #			chomp $line;
 #			my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
@@ -355,10 +355,10 @@ sub _set {
 	$self->_do_backup() if $self->backup();
 
 	my $umask = umask $self->{'umask'};
-	my $mode	=	$file eq $self->file_passwd()	?	UMASK_PWD	:
-					$file eq $self->file_group()	?	UMASK_GRP	:
-					$file eq $self->file_shadow()	?	UMASK_SHD	:
-														UMASK_SHD	;
+	my $mode	=	$file eq $self->passwd_file()	?	PERM_PWD	:
+					$file eq $self->group_file()	?	PERM_GRP	:
+					$file eq $self->shadow_file()	?	PERM_SHD	:
+														PERM_SHD	;
 
 	$count ||= 6;
 	my $tmp = $file.'.tmp';
@@ -501,7 +501,7 @@ sub rename {
 	my $tmp = $self->group_file.'.tmp';
 	open(my $fh, '<', $self->group_file());
 	open(my $ch, '>', $tmp);
-	chmod UMASK_GRP, $ch;
+	chmod PERM_GRP, $ch;
 	while(my $line = <$fh>){
 		chomp $line;
 		my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
@@ -515,7 +515,7 @@ sub rename {
 		my $tmp = $self->gshadow_file.'.tmp';
 		open(my $fh, '<', $self->gshadow_file());
 		open(my $ch, '>', $tmp);
-		chmod UMASK_PWD, $ch;
+		chmod PERM_PWD, $ch;
 		while(my $line = <$fh>){
 			chomp $line;
 			my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
@@ -632,7 +632,7 @@ sub user {
 	my $tmp = $self->passwd_file.'.tmp';
 	open(my $fh, '<', $self->passwd_file());
 	open(my $ch, '>', $tmp);
-	chmod UMASK_PWD, $ch;
+	chmod PERM_PWD, $ch;
 	while(<$fh>){
 		my @a = split /:/;
 		if($user[0] eq $a[0]){
@@ -649,6 +649,7 @@ sub user {
 	if($mod){ $self->passwd($user[0], $passwd); }
 	else{ 
 		open(my $fh, '>>', $self->shadow_file());
+		chmod PERM_SHD, $fh;
 		print $fh join(q/:/, $user[0], $passwd, int(time()/DAY), ('') x 5, "\n");
 		close($fh);
 	}
@@ -694,7 +695,7 @@ sub del_group {
 	my $tmp = $self->group_file.'.tmp';
 	open(my $fh, '<', $self->group_file());
 	open(my $ch, '>', $tmp);
-	chmod UMASK_GRP, $ch;
+	chmod PERM_GRP, $ch;
 	while(my $line = <$fh>){
 		my ($name) = split(/:/,$line,2);
 		if($group eq $name){ push @dels, $name; }
@@ -707,7 +708,7 @@ sub del_group {
 		my $tmp = $self->gshadow_file.'.tmp';
 		open(my $fh, '<', $self->gshadow_file());
 		open(my $ch, '>', $tmp);
-		chmod UMASK_SHD, $ch;
+		chmod PERM_SHD, $ch;
 		while(my $line = <$fh>){
 			my ($name) = split(/:/,$line,2);
 			print $ch $line if $group ne $name;
@@ -761,7 +762,7 @@ sub group {
 		my $tmp = $self->group_file.'.tmp';
 		open(my $fh, '<', $self->group_file());
 		open(my $ch, '>', $tmp);
-		chmod UMASK_GRP, $ch;
+		chmod PERM_GRP, $ch;
 		while(my $line = <$fh>){
 			chomp $line;
 			my ($name, $passwd) = split(/:/,$line,3);
@@ -779,7 +780,7 @@ sub group {
 			my $tmp = $self->gshadow_file.'.tmp';
 			open(my $fh, '<', $self->gshadow_file());
 			open(my $ch, '>', $tmp);
-			chmod UMASK_SHD, $ch;
+			chmod PERM_SHD, $ch;
 			while(my $line = <$fh>){
 				chomp $line;
 				my ($name, $passwd) = split(/:/,$line,3);
