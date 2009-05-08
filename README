@@ -51,6 +51,8 @@ SUBROUTINES/METHODS
         shadow - path to shadow file; default "/etc/shadow"
         group - path to group file; default "/etc/group"
         gshadow - path to gshadow file if any; default "/etc/gshadow"
+        umask - umask for creating files; default 0022 (standard for UNIX
+        and Linux systems)
         backup - boolean; if set to 1, backup will be made; default 1
         warnings - boolean; if set to 1, important warnings will be
         displayed; default 0
@@ -149,6 +151,11 @@ SUBROUTINES/METHODS
     exists_group(GROUPNAME)
         This method checks if specified group exists. It returns TRUE or
         FALSE.
+
+    default_umask([UMASK])
+        This method, if called with an argument, sets default umask for this
+        module (not Your program!). Otherwise returns the current UMASK.
+        Probably You don't want to change this.
 
     passwd_file([PATH])
         This method, if called with an argument, sets path to the *passwd*

@@ -14,13 +14,13 @@ use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.47';
+$VERSION = '0.48';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
 				gecos home shell passwd rename maxgid maxuid exists_user 
 				exists_group user users users_from_shadow del_group 
-				group groups groups_from_gshadow);
+				group groups groups_from_gshadow default_umask);
 #======================================================================
 use constant TRUE 	=> not undef;
 use constant FALSE 	=> undef;
@@ -33,6 +33,10 @@ use constant GSHADOW  	=> '/etc/gshadow';
 use constant BACKUP 	=> TRUE;
 use constant DEBUG  	=> FALSE;
 use constant WARNINGS 	=> FALSE;
+use constant UMASK		=> 0022;
+use constant UMASK_PWD	=> 0644;
+use constant UMASK_GRP	=> 0644;
+use constant UMASK_SHD	=> 0400;
 use constant PATH		=>  qr/^[\w\+_\040\#\(\)\{\}\[\]\/\-\^,\.:;&%@\\~]+\$?$/;
 #======================================================================
 my $_CHECK = {
@@ -58,6 +62,7 @@ sub new {
 				backup 		=> (defined $params{backup} 	? $params{backup} 	: BACKUP	),
 				debug 		=> (defined $params{debug} 		? $params{debug} 	: DEBUG		),
 				warnings	=> (defined $params{warnings} 	? $params{warnings} : WARNINGS	),
+				'umask'		=> (defined $params{'umask'} 	? $params{'umask'}	: UMASK		),
 			}, $class;
 			
 	$self->check_sanity(TRUE) if (caller())[0] ne __PACKAGE__;
@@ -74,9 +79,24 @@ sub check_sanity {
 		croak('File not found: ' . $_);
 	}
 
+	unless($quiet){
+		carp(q/Insecure permissions to group file!/)	and sleep(1) if ((stat($self->group_file)  )[2] & 07777) != UMASK_GRP;
+		carp(q/Insecure permissions to passwd file!/)	and sleep(1) if ((stat($self->passwd_file) )[2] & 07777) != UMASK_PWD;
+		carp(q/Insecure permissions to shadow file!/)	and sleep(1) if ((stat($self->shadow_file) )[2] & 07777) != UMASK_SHD;
+		carp(q/Insecure permissions to gshadow file!/)	and sleep(1) if ((stat($self->gshadow_file))[2] & 07777) != UMASK_GRP;
+	}
+
 	if($( !~ /^0/o){
-		carp(q/Running as "/ . getlogin() . qq/", which has currently no permissions to write to system files. READ ONLY mode ENABLED!\n/) unless $quiet;
+		carp(q/Running as "/ . getlogin() . qq/", which has currently no permissions to write to system files. READ ONLY mode ENABLED!/) unless $quiet;
 		return;
+	}
+
+	my %filenames = ( shadow => $self->shadow_file, passwd => $self->passwd_file, group => $self->group_file, gshadow => $self->gshadow_file );
+	foreach my $file0 (keys %filenames){
+		foreach my $file1 (keys %filenames){
+			next if $file0 eq $file1;
+			croak(q/Files "/ . $file0 . q/" and "/ . $file1 . q/" cannot be the same!/) if $filenames{$file0} eq $filenames{$file1};
+		}
 	}
 
 	unless(compare([$self->users()], [$self->users_from_shadow()])){
@@ -94,6 +114,7 @@ sub reset {
 	$self->{group}		= GROUP;
 	$self->{shadow}		= SHADOW;
 	$self->{gshadow}	= GSHADOW;
+	$self->{'umask'}	= UMASK;
 	return TRUE;
 }
 #======================================================================
@@ -108,8 +129,10 @@ sub _do_backup {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my ($sec,$min,$hour,$mday,$mon,$year) = localtime(time);
 
+	my $umask = umask $self->{'umask'};
+
 	my $dir = File::Spec->catfile($self->passwd_file.'.bak', ($year+1900).'.'.($mon+1).'.'.$mday.'-'.$hour.'.'.$min.'.'.$sec);
-	mkpath $dir; chmod 0700, $dir;
+	mkpath $dir; chmod 0500, $dir;
 
 	my $cpasswd		= File::Spec->catfile($dir, basename($self->passwd_file())  . q/.bz2/);
 	my $cgroup		= File::Spec->catfile($dir, basename($self->group_file())   . q/.bz2/);
@@ -118,33 +141,33 @@ sub _do_backup {
 
 	# passwd
 	my $compress = IO::Compress::Bzip2->new($cpasswd, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open(my $fh, '<', $self->passwd_file) or return;
+	open(my $fh, '<', $self->passwd_file) or (umask $umask and return);
 	$compress->print($_) while <$fh>;
 	$compress->close;
 	chmod 0644, $cpasswd;
 	
 	# group
 	$compress = IO::Compress::Bzip2->new($cgroup, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open($fh, '<', $self->group_file) or return;
+	open($fh, '<', $self->group_file) or (umask $umask and return);
 	$compress->print($_) while <$fh>;
 	$compress->close;
 	chmod 0644, $cgroup;
 
 	# shadow
 	$compress = IO::Compress::Bzip2->new($cshadow, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open($fh, '<', $self->shadow_file) or return;
+	open($fh, '<', $self->shadow_file) or (umask $umask and return);
 	$compress->print($_) while <$fh>;
 	$compress->close;
 	chmod 0400, $cshadow;
 
 	# gshadow
 	$compress = IO::Compress::Bzip2->new($cgshadow, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open($fh, '<', $self->gshadow_file) or return;
+	open($fh, '<', $self->gshadow_file) or (umask $umask and return);
 	$compress->print($_) while <$fh>;
 	$compress->close;
 	chmod 0400, $cgshadow;
 	
-	
+	umask $umask;
 
 	return;
 }
@@ -205,6 +228,15 @@ sub warnings {
 	return $self->{warnings};
 }
 #======================================================================
+sub default_umask {
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	my ($val) = @_;
+	return $self->{'umask'} unless defined $val;
+	$val = oct($val) if length($val) != 2;
+	$self->{'umask'} = $val;
+	return $self->{'umask'};
+}
+#======================================================================
 *del_user = { };
 *del_user = \&del;
 sub del { 
@@ -222,18 +254,24 @@ sub del {
 	$regexp = qr/$regexp/;
 	
 	# here unused gids will be saved
-	my (@gids, @deleted);
+	my (@gids, @deleted, %_gids);
 	
+	my $umask = umask $self->{'umask'};
+
 	# remove from passwd
 	my $tmp = $self->passwd_file.'.tmp';
 	open(my $fh, '<', $self->passwd_file());
 	open(my $ch, '>', $tmp);
+	chmod UMASK_PWD, $ch;
 	while(my $line = <$fh>){
 		my ($user, undef, undef, $gid) = split(/:/,$line, 5);
 		if($user =~ $regexp){ 
 			push @gids, $gid; 
 			push @deleted, $user;
-		}else{ print $ch $line; }
+		}else{ 
+			$_gids{$gid} = defined $_gids{$gid} ? $_gids{$gid} + 1 : 1;
+			print $ch $line; 
+		}
 	}
 	close($fh);close($ch);
 	move($tmp, $self->passwd_file());
@@ -242,51 +280,60 @@ sub del {
 	$tmp = $self->shadow_file.'.tmp';
 	open($fh, '<', $self->shadow_file());
 	open($ch, '>', $tmp);
+	chmod UMASK_SHD, $ch;
 	while(my $line = <$fh>){
 		next if (split(/:/,$line,2))[0] =~ $regexp;
 		print $ch $line;
 	}
 	close($fh);close($ch);
 	move($tmp, $self->shadow_file());
-	
-	# remove from group
-	my @groups;
-	my $gids = '^'.join('$|^',@gids).'$';
-	$gids = qr/$gids/;
-	$tmp = $self->group_file.'.tmp';
-	open($fh, '<', $self->group_file());
-	open($ch, '>', $tmp);
-	while(my $line = <$fh>){
-		chomp $line;
-		my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
-		$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
-		#next if $gid =~ $gids and not length $users;
-		if($gid =~ $gids and not length $users){
-			push @groups, $name;
-			next;
-		}
-		print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
-	}
-	close($fh);close($ch);
-	move($tmp, $self->group_file());
-	
-	# remove from gshadow
-	if(-f $self->gshadow_file){
-		my $groups = '^'.join('$|^',@groups).'$';
-		$groups = qr/$groups/;
-		$tmp = $self->gshadow_file.'.tmp';
-		open($fh, '<', $self->gshadow_file());
-		open($ch, '>', $tmp);
-		while(my $line = <$fh>){
-			chomp $line;
-			my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
-			$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
-			next if $name =~ $groups and not length $users;
-			print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
-		}
-		close($fh);close($ch);
-		move($tmp, $self->gshadow_file());
-	}
+
+# THIS IS POTENTIALLY DANGEROUS !!!	###################################
+#	# remove from group
+#	my @groups;
+#	for my $idx (reverse 0..$#gids){
+#		splice @gids, $idx, 1 if $_gids{ $gids[$idx] };
+#	}
+#	my $gids = '^'.join('$|^',@gids).'$';
+#	$gids = qr/$gids/;
+#	$tmp = $self->group_file.'.tmp';
+#	open($fh, '<', $self->group_file());
+#	open($ch, '>', $tmp);
+#	chmod UMASK_GRP, $ch;
+#	while(my $line = <$fh>){
+#		chomp $line;
+#		my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
+#		$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
+#		#next if $gid =~ $gids and not length $users;
+#		if($gid =~ $gids and not length $users){
+#			push @groups, $name;
+#			next;
+#		}
+#		print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
+#	}
+#	close($fh);close($ch);
+#	move($tmp, $self->group_file());
+#	
+#	# remove from gshadow
+#	if(-f $self->gshadow_file){
+#		my $groups = '^'.join('$|^',@groups).'$';
+#		$groups = qr/$groups/;
+#		$tmp = $self->gshadow_file.'.tmp';
+#		open($fh, '<', $self->gshadow_file());
+#		open($ch, '>', $tmp);
+#		chmod UMASK_SHD, $ch;
+#		while(my $line = <$fh>){
+#			chomp $line;
+#			my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
+#			$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
+#			next if $name =~ $groups and not length $users;
+#			print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
+#		}
+#		close($fh);close($ch);
+#		move($tmp, $self->gshadow_file());
+#	}
+#######################################################################
+	umask $umask;
 
 	return @deleted if wantarray;
 	return scalar @deleted;
@@ -307,10 +354,17 @@ sub _set {
 
 	$self->_do_backup() if $self->backup();
 
+	my $umask = umask $self->{'umask'};
+	my $mode	=	$file eq $self->file_passwd()	?	UMASK_PWD	:
+					$file eq $self->file_group()	?	UMASK_GRP	:
+					$file eq $self->file_shadow()	?	UMASK_SHD	:
+														UMASK_SHD	;
+
 	$count ||= 6;
 	my $tmp = $file.'.tmp';
 	open(my $fh, '<', $file);
 	open(my $ch, '>', $tmp);
+	chmod $mode, $ch;
 	my $ret;
 	while(<$fh>){
 		chomp;
@@ -326,6 +380,9 @@ sub _set {
 	}
 	close($fh);close($ch);
 	move($tmp, $file);
+
+	umask $umask;
+
 	return $ret;
 }
 #======================================================================
@@ -438,10 +495,13 @@ sub rename {
 	}
 	
 	$self->_do_backup() if $self->backup();
+
+	my $umask = umask $self->{'umask'};
 	
 	my $tmp = $self->group_file.'.tmp';
 	open(my $fh, '<', $self->group_file());
 	open(my $ch, '>', $tmp);
+	chmod UMASK_GRP, $ch;
 	while(my $line = <$fh>){
 		chomp $line;
 		my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
@@ -455,6 +515,7 @@ sub rename {
 		my $tmp = $self->gshadow_file.'.tmp';
 		open(my $fh, '<', $self->gshadow_file());
 		open(my $ch, '>', $tmp);
+		chmod UMASK_PWD, $ch;
 		while(my $line = <$fh>){
 			chomp $line;
 			my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
@@ -466,6 +527,9 @@ sub rename {
 	}
 	
 	$self->_set($self->passwd_file(), $user, 0, $val);	
+
+	umask $umask;
+
 	return $self->_set($self->shadow_file(), $user, 0, $val);
 }
 #======================================================================
@@ -559,6 +623,8 @@ sub user {
 	}
 	
 	$self->_do_backup() if $self->backup();
+
+	my $umask = umask $self->{'umask'};
 	
 	my $passwd = splice @user,1, 1, 'x';
 	
@@ -566,6 +632,7 @@ sub user {
 	my $tmp = $self->passwd_file.'.tmp';
 	open(my $fh, '<', $self->passwd_file());
 	open(my $ch, '>', $tmp);
+	chmod UMASK_PWD, $ch;
 	while(<$fh>){
 		my @a = split /:/;
 		if($user[0] eq $a[0]){
@@ -585,7 +652,8 @@ sub user {
 		print $fh join(q/:/, $user[0], $passwd, int(time()/DAY), ('') x 5, "\n");
 		close($fh);
 	}
-	
+
+	umask $umask;	
 	return TRUE;
 }
 #======================================================================
@@ -620,11 +688,13 @@ sub del_group {
 	}
 	
 	$self->_do_backup() if $self->backup();
+	my $umask = umask $self->{'umask'};
 	
 	my @dels;
 	my $tmp = $self->group_file.'.tmp';
 	open(my $fh, '<', $self->group_file());
 	open(my $ch, '>', $tmp);
+	chmod UMASK_GRP, $ch;
 	while(my $line = <$fh>){
 		my ($name) = split(/:/,$line,2);
 		if($group eq $name){ push @dels, $name; }
@@ -637,6 +707,7 @@ sub del_group {
 		my $tmp = $self->gshadow_file.'.tmp';
 		open(my $fh, '<', $self->gshadow_file());
 		open(my $ch, '>', $tmp);
+		chmod UMASK_SHD, $ch;
 		while(my $line = <$fh>){
 			my ($name) = split(/:/,$line,2);
 			print $ch $line if $group ne $name;
@@ -644,6 +715,8 @@ sub del_group {
 		close($fh);close($ch);
 		move($tmp, $self->gshadow_file());
 	}
+
+	umask $umask;
 
 	return @dels if wantarray;
 	return scalar @dels;
@@ -661,21 +734,25 @@ sub group {
 		return if $( !~ /^0/o;
 		
 		$self->_do_backup() if $self->backup();
+		my $umask = umask $self->{'umask'};
 		
 		unless($_CHECK->{gid}($gid)){ 
 			carp(qq/Incorrect GID "$gid"!/) if $self->warnings(); 
+			umask $umask;
 			return; 
 		}
 # 2009.03.30 - Thx to Jonas Genannt; will allow to add empty groups
 #		unless(ref $users and ref $users eq 'ARRAY'){ 
 		if(defined($users) && ref $users ne 'ARRAY' ){ 
 			carp(qq/Incorrect parameter "users"! It should be arrayref.../) if $self->warnings(); 
+			umask $umask;
 			return; 
 		}
 		$users ||= [ ];
 		foreach(@$users){
 			unless($_CHECK->{rename}($_)){ 
 				carp(qq/Incorrect user "$_"!/) if $self->warnings(); 
+				umask $umask;
 				return; 
 			}
 		}
@@ -684,6 +761,7 @@ sub group {
 		my $tmp = $self->group_file.'.tmp';
 		open(my $fh, '<', $self->group_file());
 		open(my $ch, '>', $tmp);
+		chmod UMASK_GRP, $ch;
 		while(my $line = <$fh>){
 			chomp $line;
 			my ($name, $passwd) = split(/:/,$line,3);
@@ -701,6 +779,7 @@ sub group {
 			my $tmp = $self->gshadow_file.'.tmp';
 			open(my $fh, '<', $self->gshadow_file());
 			open(my $ch, '>', $tmp);
+			chmod UMASK_SHD, $ch;
 			while(my $line = <$fh>){
 				chomp $line;
 				my ($name, $passwd) = split(/:/,$line,3);
@@ -713,6 +792,8 @@ sub group {
 			close($fh);close($ch);
 			move($tmp, $self->gshadow_file());
 		}
+		
+		umask $umask;
 	}else{
 		my ($gid, @users);
 		open(my $fh, '<', $self->group_file());
@@ -834,6 +915,8 @@ Constructor. Possible parameters are:
 
 =item B<gshadow> - path to gshadow file if any; default C</etc/gshadow>
 
+=item B<umask> - umask for creating files; default C<0022> (standard for UNIX and Linux systems)
+
 =item B<backup> - boolean; if set to C<1>, backup will be made; default C<1>
 
 =item B<warnings> - boolean; if set to C<1>, important warnings will be displayed; default C<0>
@@ -951,6 +1034,11 @@ This method checks if specified user exists. It returns TRUE or FALSE.
 =item B<exists_group(GROUPNAME)>
 
 This method checks if specified group exists. It returns TRUE or FALSE.
+
+=item B<default_umask([UMASK])>
+
+This method, if called with an argument, sets default umask for this module (not Your program!).
+Otherwise returns the current UMASK. Probably You don't want to change this.
 
 =item B<passwd_file([PATH])>
 

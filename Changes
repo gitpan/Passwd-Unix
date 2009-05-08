@@ -1,5 +1,8 @@
 Revision history for Perl extension Passwd::Unix.
 
+0.48   Fri, 08 May 2009 22:21:29 +0200
+	- Some security fixes.
+
 0.47   Wed, 01 Apr 2009 15:49:04 +0200
 	- Support for gshadow file added.
 
