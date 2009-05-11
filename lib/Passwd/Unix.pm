@@ -14,7 +14,7 @@ use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.5';
+$VERSION = '0.51';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -288,51 +288,38 @@ sub del {
 	close($fh);close($ch);
 	move($tmp, $self->shadow_file());
 
-# THIS IS POTENTIALLY DANGEROUS !!!	###################################
-#	# remove from group
-#	my @groups;
-#	for my $idx (reverse 0..$#gids){
-#		splice @gids, $idx, 1 if $_gids{ $gids[$idx] };
-#	}
-#	my $gids = '^'.join('$|^',@gids).'$';
-#	$gids = qr/$gids/;
-#	$tmp = $self->group_file.'.tmp';
-#	open($fh, '<', $self->group_file());
-#	open($ch, '>', $tmp);
-#	chmod PERM_GRP, $ch;
-#	while(my $line = <$fh>){
-#		chomp $line;
-#		my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
-#		$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
-#		#next if $gid =~ $gids and not length $users;
-#		if($gid =~ $gids and not length $users){
-#			push @groups, $name;
-#			next;
-#		}
-#		print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
-#	}
-#	close($fh);close($ch);
-#	move($tmp, $self->group_file());
-#	
-#	# remove from gshadow
-#	if(-f $self->gshadow_file){
-#		my $groups = '^'.join('$|^',@groups).'$';
-#		$groups = qr/$groups/;
-#		$tmp = $self->gshadow_file.'.tmp';
-#		open($fh, '<', $self->gshadow_file());
-#		open($ch, '>', $tmp);
-#		chmod PERM_SHD, $ch;
-#		while(my $line = <$fh>){
-#			chomp $line;
-#			my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
-#			$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
-#			next if $name =~ $groups and not length $users;
-#			print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
-#		}
-#		close($fh);close($ch);
-#		move($tmp, $self->gshadow_file());
-#	}
-#######################################################################
+	# remove from group
+	my $gids = '^'.join('$|^',@gids).'$';
+	$gids = qr/$gids/;
+	$tmp = $self->group_file.'.tmp';
+	open($fh, '<', $self->group_file());
+	open($ch, '>', $tmp);
+	chmod PERM_GRP, $ch;
+	while(my $line = <$fh>){
+		chomp $line;
+		my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
+		$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
+		print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
+	}
+	close($fh);close($ch);
+	move($tmp, $self->group_file());
+	
+	# remove from gshadow
+	if(-f $self->gshadow_file){
+		$tmp = $self->gshadow_file.'.tmp';
+		open($fh, '<', $self->gshadow_file());
+		open($ch, '>', $tmp);
+		chmod PERM_SHD, $ch;
+		while(my $line = <$fh>){
+			chomp $line;
+			my ($name, $passwd, $gid, $users) = split(/:/,$line,4);
+			$users = join(q/,/, grep { !/$regexp/ } split(/\s*,\s*/, $users));
+			print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
+		}
+		close($fh);close($ch);
+		move($tmp, $self->gshadow_file());
+	}
+
 	umask $umask;
 
 	return @deleted if wantarray;

@@ -1,5 +1,8 @@
 Revision history for Perl extension Passwd::Unix.
 
+0.51  Mon, 11 May 2009 13:01:58 +0200
+	- Added support for removing users from group and gshadow files.
+
 0.5   Sat, 09 May 2009 03:10:16 +0200
 	- Fixed some typos.
 
