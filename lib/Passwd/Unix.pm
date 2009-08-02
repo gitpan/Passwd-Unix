@@ -14,7 +14,7 @@ use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.51';
+$VERSION = '0.52';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -40,7 +40,7 @@ use constant PERM_SHD	=> 0400;
 use constant PATH		=>  qr/^[\w\+_\040\#\(\)\{\}\[\]\/\-\^,\.:;&%@\\~]+\$?$/;
 #======================================================================
 my $_CHECK = {
-	'rename' 	=> sub { return if not defined $_[0] or $_[0] !~ /^[A-Z0-9_-]+$/io; TRUE },
+	'rename' 	=> sub { return if not defined $_[0] or $_[0] !~ /^[A-Z0-9_\.-]+$/io; TRUE },
 	'gid'		=> sub { return if not defined $_[0] or $_[0] !~ /^[0-9]+$/o; TRUE },
 	'uid'		=> sub { return if not defined $_[0] or $_[0] !~ /^[0-9]+$/o; TRUE },
 	'home'		=> sub { return if not defined $_[0] or $_[0] !~ PATH; TRUE },
