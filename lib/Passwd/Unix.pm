@@ -5,22 +5,24 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
 use warnings;
 use strict;
 use Carp;
+use Config;
 use File::Spec;
 use File::Path;
 use File::Copy;
 use File::Basename qw(dirname basename);
-use IO::Compress::Bzip2;
+use IO::Compress::Bzip2 qw($Bzip2Error);
 use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.52';
+$VERSION = '0.6';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
 				gecos home shell passwd rename maxgid maxuid exists_user 
 				exists_group user users users_from_shadow del_group 
-				group groups groups_from_gshadow default_umask);
+				group groups groups_from_gshadow default_umask
+				unused_uid unused_gid);
 #======================================================================
 use constant TRUE 	=> not undef;
 use constant FALSE 	=> undef;
@@ -70,6 +72,14 @@ sub new {
 	return $self;
 }
 #======================================================================
+sub error {
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	
+	$self->{ error } = shift if defined $_[0];
+
+	return $self->{ error } || q//;
+}
+#======================================================================
 sub check_sanity {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
 	my $quiet = shift;
@@ -87,7 +97,7 @@ sub check_sanity {
 	}
 
 	if($( !~ /^0/o){
-		carp(q/Running as "/ . getlogin() . qq/", which has currently no permissions to write to system files. READ ONLY mode ENABLED!/) unless $quiet;
+		carp(q/Running as "/ . getlogin() . qq/", which has currently no permissions to write to system files. Some operations (i.e. modify) may fail!/) unless $quiet;
 		return;
 	}
 
@@ -131,6 +141,8 @@ sub _do_backup {
 
 	my $umask = umask $self->{'umask'};
 
+	$self->error(q//);
+
 	my $dir = File::Spec->catfile($self->passwd_file.'.bak', ($year+1900).'.'.($mon+1).'.'.$mday.'-'.$hour.'.'.$min.'.'.$sec);
 	mkpath $dir; chmod 0500, $dir;
 
@@ -140,33 +152,35 @@ sub _do_backup {
 	my $cgshadow	= File::Spec->catfile($dir, basename($self->gshadow_file()) . q/.bz2/);
 
 	# passwd
-	my $compress = IO::Compress::Bzip2->new($cpasswd, AutoClose => 1, Append => 1, BlockSize100K => 9);
+	my $compress = IO::Compress::Bzip2->new($cpasswd, AutoClose => 1, Append => 1, BlockSize100K => 9) or ($self->error($Bzip2Error) and umask $umask and return);
 	open(my $fh, '<', $self->passwd_file) or (umask $umask and return);
 	$compress->print($_) while <$fh>;
 	$compress->close;
 	chmod 0644, $cpasswd;
 	
 	# group
-	$compress = IO::Compress::Bzip2->new($cgroup, AutoClose => 1, Append => 1, BlockSize100K => 9);
+	$compress = IO::Compress::Bzip2->new($cgroup, AutoClose => 1, Append => 1, BlockSize100K => 9) or ($self->error($Bzip2Error) and umask $umask and return);
 	open($fh, '<', $self->group_file) or (umask $umask and return);
 	$compress->print($_) while <$fh>;
 	$compress->close;
 	chmod 0644, $cgroup;
 
 	# shadow
-	$compress = IO::Compress::Bzip2->new($cshadow, AutoClose => 1, Append => 1, BlockSize100K => 9);
+	$compress = IO::Compress::Bzip2->new($cshadow, AutoClose => 1, Append => 1, BlockSize100K => 9) or ($self->error($Bzip2Error) and umask $umask and return);
 	open($fh, '<', $self->shadow_file) or (umask $umask and return);
 	$compress->print($_) while <$fh>;
 	$compress->close;
 	chmod 0400, $cshadow;
 
 	# gshadow
-	$compress = IO::Compress::Bzip2->new($cgshadow, AutoClose => 1, Append => 1, BlockSize100K => 9);
-	open($fh, '<', $self->gshadow_file) or (umask $umask and return);
-	$compress->print($_) while <$fh>;
-	$compress->close;
-	chmod 0400, $cgshadow;
-	
+	if(-f $self->gshadow_file){
+		$compress = IO::Compress::Bzip2->new($cgshadow, AutoClose => 1, Append => 1, BlockSize100K => 9) or ($self->error($Bzip2Error) and umask $umask and return);
+		open($fh, '<', $self->gshadow_file) or (umask $umask and return);
+		$compress->print($_) while <$fh>;
+		$compress->close;
+		chmod 0400, $cgshadow;
+	}
+
 	umask $umask;
 
 	return;
@@ -240,15 +254,22 @@ sub default_umask {
 *del_user = { };
 *del_user = \&del;
 sub del { 
-	return if $( !~ /^0/o;
+#	This method will fail, if user doesn't have permissions to files.
+#   Error will be in $self->error() and error();
+#	return if $( !~ /^0/o;
 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	unless(scalar @_){
-		carp(q|Method/function "del" cannot run without params!|) if $self->warnings();
+		my $error = $self->error(q|Method/function "del" cannot run without params!|);
+		carp($error) if $self->warnings();
 		return;
 	}
-	
-	$self->_do_backup() if $self->backup();
+
+	if( $self->backup() ){
+		$self->_do_backup() or return;
+	}
 	
 	my $regexp = '^'.join('$|^',@_).'$';
 	$regexp = qr/$regexp/;
@@ -260,8 +281,8 @@ sub del {
 
 	# remove from passwd
 	my $tmp = $self->passwd_file.'.tmp';
-	open(my $fh, '<', $self->passwd_file());
-	open(my $ch, '>', $tmp);
+	open(my $fh, '<', $self->passwd_file()) or ($self->error($!) and umask $umask and return);
+	open(my $ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 	chmod PERM_PWD, $ch;
 	while(my $line = <$fh>){
 		my ($user, undef, undef, $gid) = split(/:/,$line, 5);
@@ -274,26 +295,26 @@ sub del {
 		}
 	}
 	close($fh);close($ch);
-	move($tmp, $self->passwd_file());
+	move($tmp, $self->passwd_file()) or ($self->error($!) and umask $umask and return);
 	
 	# remove from shadow
 	$tmp = $self->shadow_file.'.tmp';
-	open($fh, '<', $self->shadow_file());
-	open($ch, '>', $tmp);
+	open($fh, '<', $self->shadow_file()) or ($self->error($!) and umask $umask and return);
+	open($ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 	chmod PERM_SHD, $ch;
 	while(my $line = <$fh>){
 		next if (split(/:/,$line,2))[0] =~ $regexp;
 		print $ch $line;
 	}
 	close($fh);close($ch);
-	move($tmp, $self->shadow_file());
+	move($tmp, $self->shadow_file()) or ($self->error($!) and umask $umask and return);
 
 	# remove from group
 	my $gids = '^'.join('$|^',@gids).'$';
 	$gids = qr/$gids/;
 	$tmp = $self->group_file.'.tmp';
-	open($fh, '<', $self->group_file());
-	open($ch, '>', $tmp);
+	open($fh, '<', $self->group_file()) or ($self->error($!) and umask $umask and return);
+	open($ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 	chmod PERM_GRP, $ch;
 	while(my $line = <$fh>){
 		chomp $line;
@@ -302,13 +323,13 @@ sub del {
 		print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
 	}
 	close($fh);close($ch);
-	move($tmp, $self->group_file());
+	move($tmp, $self->group_file()) or ($self->error($!) and umask $umask and return);
 	
 	# remove from gshadow
 	if(-f $self->gshadow_file){
 		$tmp = $self->gshadow_file.'.tmp';
-		open($fh, '<', $self->gshadow_file());
-		open($ch, '>', $tmp);
+		open($fh, '<', $self->gshadow_file()) or ($self->error($!) and umask $umask and return);
+		open($ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 		chmod PERM_SHD, $ch;
 		while(my $line = <$fh>){
 			chomp $line;
@@ -317,7 +338,7 @@ sub del {
 			print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
 		}
 		close($fh);close($ch);
-		move($tmp, $self->gshadow_file());
+		move($tmp, $self->gshadow_file()) or ($self->error($!) and umask $umask and return);
 	}
 
 	umask $umask;
@@ -327,19 +348,27 @@ sub del {
 }
 #======================================================================
 sub _set {
-	return if $( !~ /^0/o;
+#	This method will fail, if user doesn't have permissions to files.
+#   Error will be in $self->error() and error();
+#	return if $( !~ /^0/o;
+
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	return if scalar @_ < 4;
 	my ($file, $user, $pos, $val, $count) = @_;
 	
 	my @t = split(/::/,(caller(1))[3]);
 	croak(qq/\n"_set" cannot be called from outside of Passwd::Unix!/) if $t[-2] ne 'Unix';	
 	unless($_CHECK->{$t[-1]}($val)){ 
-		carp(qq/Incorrect parameters for "$t[-1]! Leaving unchanged..."/) if $self->warnings(); 
+		my $error = $self->error(qq/Incorrect parameters for "$t[-1]! Leaving unchanged..."/);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 
-	$self->_do_backup() if $self->backup();
+	if( $self->backup() ){
+		$self->_do_backup() or return;
+	}
 
 	my $umask = umask $self->{'umask'};
 	my $mode	=	$file eq $self->passwd_file()	?	PERM_PWD	:
@@ -349,8 +378,8 @@ sub _set {
 
 	$count ||= 6;
 	my $tmp = $file.'.tmp';
-	open(my $fh, '<', $file);
-	open(my $ch, '>', $tmp);
+	open(my $fh, '<', $file) or ($self->error($!) and umask $umask and return);
+	open(my $ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 	chmod $mode, $ch;
 	my $ret;
 	while(<$fh>){
@@ -366,7 +395,7 @@ sub _set {
 		}
 	}
 	close($fh);close($ch);
-	move($tmp, $file);
+	move($tmp, $file) or ($self->error($!) and umask $umask and return);
 
 	umask $umask;
 
@@ -375,15 +404,18 @@ sub _set {
 #======================================================================
 sub _get {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	return if scalar @_ != 3;
 	my ($file, $user, $pos) = @_;
 	
 	unless($_CHECK->{'rename'}($user)){ 
-		carp(qq/Incorrect user "$user"!/) if $self->warnings(); 
+		my $error = $self->error(qq/Incorrect user "$user"!/);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 	
-	open(my $fh, '<', $file);
+	open(my $fh, '<', $file) or ($self->error($!) and return);
 	while(<$fh>){
 		my @a = split /:/;
 		next if $a[0] ne $user;
@@ -395,10 +427,13 @@ sub _get {
 #======================================================================
 sub uid { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 2);
 	}elsif(scalar @_ != 2){
-		carp(q/Incorrect parameters for "uid"!/) if $self->warnings();
+		my $error = $self->error( q/Incorrect parameters for "uid"!/ );
+		carp($error) if $self->warnings();
 		return;
 	}
 	return $self->_set($self->passwd_file(), $_[0], 2, $_[1]);
@@ -406,10 +441,13 @@ sub uid {
 #======================================================================
 sub gid {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 3);
 	}elsif(scalar @_ != 2){
-		carp(q/Incorrect parameters for "gid"!/) if $self->warnings();
+		my $error = $self->error( q/Incorrect parameters for "gid"!/ );
+		carp($error) if $self->warnings();
 		return;
 	}
 	return $self->_set($self->passwd_file(), $_[0], 3, $_[1]);
@@ -417,10 +455,13 @@ sub gid {
 #======================================================================
 sub gecos {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 4);
 	}elsif(scalar @_ != 2){
-		carp(q/Incorrect parameters for "gecos"!/) if $self->warnings();
+		my $error = $self->error(q/Incorrect parameters for "gecos"!/);
+		carp($error) if $self->warnings();
 		return;
 	}
 	return $self->_set($self->passwd_file(), $_[0], 4, $_[1]);
@@ -428,10 +469,13 @@ sub gecos {
 #======================================================================
 sub home { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 5);
 	}elsif(scalar @_ != 2){
-		carp(q/Incorrect parameters for "home"!/) if $self->warnings();
+		my $error = $self->error(q/Incorrect parameters for "home"!/);
+		carp($error) if $self->warnings();
 		return;
 	}
 	return $self->_set($self->passwd_file(), $_[0], 5, $_[1]);
@@ -439,10 +483,13 @@ sub home {
 #======================================================================
 sub shell { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	if(scalar @_ == 1){
 		return $self->_get($self->passwd_file(), $_[0], 6);
 	}elsif(scalar @_ != 2){
-		carp(q/Incorrect parameters for "shell"!/) if $self->warnings();
+		my $error = $self->error(q/Incorrect parameters for "shell"!/);
+		carp($error) if $self->warnings();
 		return;
 	}
 	return $self->_set($self->passwd_file(), $_[0], 6, $_[1]);	
@@ -450,44 +497,55 @@ sub shell {
 #======================================================================
 sub passwd { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	if(scalar @_ == 1){
 		return $self->_get($self->shadow_file(), $_[0], 1);
 	}elsif(scalar @_ != 2){
-		carp(q/Incorrect parameters for "passwd"!/) if $self->warnings();
+		my $error = $self->error(q/Incorrect parameters for "passwd"!/);
+		carp($error) if $self->warnings();
 		return;
 	}
 	return $self->_set($self->shadow_file(), $_[0], 1, $_[1], 8);	
 }
 #======================================================================
 sub rename { 
-	return if $( !~ /^0/o;
+#	This method will fail, if user doesn't have permissions to files.
+#   Error will be in $self->error() and error();
+#	return if $( !~ /^0/o;
 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
 	
 	if(scalar @_ != 2){ 
-		carp(q/Incorrect parameters for "rename"!/) if $self->warnings(); 
+		my $error = $self->error(q/Incorrect parameters for "rename"!/);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 	
 	my ($user, $val) = @_;
 	unless($self->exists_user($user)){ 
-		carp(qq/User "$user" does not exists!/) if $self->warnings(); 
+		my $error = $self->error(qq/User "$user" does not exists!/);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 	
 	my $gid = $self->gid($user);
 	unless(defined $gid){ 
-		carp(qq/Cannot retrieve GID of user "$user"! Leaving unchanged.../) if $self->warnings(); 
+		my $error = $self->error(qq/Cannot retrieve GID of user "$user"! Leaving unchanged.../);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 	
-	$self->_do_backup() if $self->backup();
+	if( $self->backup() ){
+		$self->_do_backup() or return;
+	}
 
 	my $umask = umask $self->{'umask'};
 	
 	my $tmp = $self->group_file.'.tmp';
-	open(my $fh, '<', $self->group_file());
-	open(my $ch, '>', $tmp);
+	open(my $fh, '<', $self->group_file()) or ($self->error($!) and umask $umask and return);
+	open(my $ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 	chmod PERM_GRP, $ch;
 	while(my $line = <$fh>){
 		chomp $line;
@@ -496,12 +554,12 @@ sub rename {
 		print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
 	}
 	close($fh);close($ch);
-	move($tmp, $self->group_file());
+	move($tmp, $self->group_file()) or ($self->error($!) and umask $umask and return);
 	
 	if(-f $self->gshadow_file){
 		my $tmp = $self->gshadow_file.'.tmp';
-		open(my $fh, '<', $self->gshadow_file());
-		open(my $ch, '>', $tmp);
+		open(my $fh, '<', $self->gshadow_file()) or ($self->error($!) and umask $umask and return);
+		open(my $ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 		chmod PERM_PWD, $ch;
 		while(my $line = <$fh>){
 			chomp $line;
@@ -510,7 +568,7 @@ sub rename {
 			print $ch join(q/:/, $name, $passwd, $gid, $users),"\n";
 		}
 		close($fh);close($ch);
-		move($tmp, $self->gshadow_file());
+		move($tmp, $self->gshadow_file()) or ($self->error($!) and umask $umask and return);
 	}
 	
 	$self->_set($self->passwd_file(), $user, 0, $val);	
@@ -522,20 +580,33 @@ sub rename {
 #======================================================================
 sub maxgid {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my $max = 0;
-	open(my $fh, '<', $self->passwd_file());
+	open(my $fh, '<', $self->passwd_file()) or ($self->error($!) and return);
 	while(<$fh>){
 		my $tmp = (split(/:/,$_))[3];
 		$max = $tmp > $max ? $tmp : $max;
 	}
 	close($fh);
+	
+	# we should check group file too...
+	open($fh, '<', $self->group_file()) or ($self->error($!) and return);
+	while(<$fh>){
+		my $tmp = (split(/:/,$_))[2];
+		$max = $tmp > $max ? $tmp : $max;
+	}
+	close($fh);
+
 	return $max;
 }
 #======================================================================
 sub maxuid {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my $max = 0;
-	open(my $fh, '<', $self->passwd_file());
+	open(my $fh, '<', $self->passwd_file()) or ($self->error($!) and return);
 	while(<$fh>){
 		my $tmp = (split(/:/,$_))[2];
 		$max = $tmp > $max ? $tmp : $max;
@@ -544,12 +615,83 @@ sub maxuid {
 	return $max;
 }
 #======================================================================
+sub unused_uid {
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
+	my $min  = shift || 0;
+	my $max  = shift || ( 2 ** ( $Config{ intsize } * 8 ) );
+
+	# UIDs could be in random order, so this is only safe way...
+	my ( @seen, $last );
+	
+	open(my $fh, '<', $self->passwd_file()) or ($self->error($!) and return);
+	push @seen, (split(/:/,$_))[2] while <$fh>;
+	close($fh);
+	
+	for my $uid ( sort { $a <=> $b } @seen ){
+		next	if $uid < $min;
+		
+		if( not defined $last ){
+			return $min if $uid > $min;
+
+			$last = $uid;
+			next;
+		}
+
+		return $last + 1 if $uid > $last + 1 and $last + 1 <= $max;
+		return if $uid > $max;
+		$last = $uid;
+	}
+	
+	return;
+}
+#======================================================================
+sub unused_gid {
+	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
+	my $min  = shift || 0;
+	my $max  = shift || ( 2 ** ( $Config{ intsize } * 8 ) );
+
+	# GIDs could be in random order, so this is only safe way...
+	my ( %seen, $last );
+	
+	open(my $fh, '<', $self->passwd_file()) or ($self->error($!) and return);
+	$seen{ (split(/:/,$_))[3] } = 1 while <$fh>;
+	close($fh);
+	
+	# we should check group file too...
+	open($fh, '<', $self->group_file()) or ($self->error($!) and return);
+	$seen{ (split(/:/,$_))[2] } = 1 while <$fh>;
+	close($fh);
+	
+	for my $gid ( sort { $a <=> $b } keys %seen ){
+		next if $gid < $min;
+		
+		if( not defined $last ){
+			return $min if $gid > $min;
+
+			$last = $gid;
+			next;
+		}
+
+		return $last + 1 if $gid > $last + 1 and $last + 1 <= $max;
+		return if $gid > $max;
+		$last = $gid;
+	}
+	
+	return;
+}
+#======================================================================
 sub _exists {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	return if scalar @_ != 3;
 	my ($file, $pos, $val) = @_;
 	
-	open(my $fh, '<', $file);
+	open(my $fh, '<', $file) or ($self->error($!) and return);
 	while(<$fh>){
 		my @a = split /:/;
 		return TRUE if $a[$pos] eq $val;
@@ -559,9 +701,12 @@ sub _exists {
 #======================================================================
 sub exists_user {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my ($user) = @_;
 	unless($_CHECK->{rename}($user)){ 
-		carp(qq/Incorrect user "$user"!/) if $self->warnings(); 
+		my $error = $self->error(qq/Incorrect user "$user"!/);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 	return $self->_exists($self->passwd_file(), 0, $user);
@@ -569,9 +714,12 @@ sub exists_user {
 #======================================================================
 sub exists_group {
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my ($group) = @_;
 	unless($_CHECK->{rename}($group)){ 
-		carp(qq/Incorrect group "$group"!/) if $self->warnings(); 
+		my $error = $self->error(qq/Incorrect group "$group"!/);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 	return $self->_exists($self->group_file(), 0, $group);
@@ -579,15 +727,18 @@ sub exists_group {
 #======================================================================
 sub user { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my (@user) = @_;
 	
 	unless($_CHECK->{rename}($user[0])){ 
-		carp(qq/Incorrect user "$user[0]"!/) if $self->warnings(); 
+		my $error = $self->error(qq/Incorrect user "$user[0]"!/);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 
 	if(scalar @_ != 7){
-		open(my $fh, '<', $self->passwd_file());
+		open(my $fh, '<', $self->passwd_file()) or ($self->error($!) and return);
 		while(<$fh>){
 			my @a = split /:/;
 			next if $a[0] ne $user[0];
@@ -595,21 +746,27 @@ sub user {
 			splice @a, 0, 2;
 			return $self->passwd($user[0]), @a;
 		}
-		carp(qq/User "$user[0]" does not exists!/) if $self->warnings();
+		my $error = $self->error(qq/User "$user[0]" does not exists!/);
+		carp($error) if $self->warnings();
 		return;
 	}
 	
-	return if $( !~ /^0/o;
+#	The rest of this method will fail, if user doesn't have permissions to files.
+#   Error will be in $self->error() and error();
+#	return if $( !~ /^0/o;
 
 	my @tests = qw(rename passwd uid gid gecos home shell);
 	for(1..6){
 		unless($_CHECK->{$tests[$_]}($user[$_])){ 
-			carp(qq/Incorrect parameters for "$tests[$_]"!/) if $self->warnings(); 
+			my $error = $self->error(qq/Incorrect parameters for "$tests[$_]"!/);
+			carp($error) if $self->warnings(); 
 			return; 
 		}
 	}
 	
-	$self->_do_backup() if $self->backup();
+	if( $self->backup() ){
+		$self->_do_backup() or return;
+	}
 
 	my $umask = umask $self->{'umask'};
 	
@@ -617,8 +774,8 @@ sub user {
 	
 	my $mod;
 	my $tmp = $self->passwd_file.'.tmp';
-	open(my $fh, '<', $self->passwd_file());
-	open(my $ch, '>', $tmp);
+	open(my $fh, '<', $self->passwd_file()) or ($self->error($!) and umask $umask and return);
+	open(my $ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 	chmod PERM_PWD, $ch;
 	while(<$fh>){
 		my @a = split /:/;
@@ -630,12 +787,12 @@ sub user {
 	close($fh);
 	print $ch join(q/:/, @user),"\n" unless $mod;
 	close($ch);
-	move($tmp, $self->passwd_file());
+	move($tmp, $self->passwd_file()) or ($self->error($!) and umask $umask and return);
 	
 	# user already exists	
 	if($mod){ $self->passwd($user[0], $passwd); }
 	else{ 
-		open(my $fh, '>>', $self->shadow_file());
+		open(my $fh, '>>', $self->shadow_file()) or ($self->error($!) and umask $umask and return);
 		chmod PERM_SHD, $fh;
 		print $fh join(q/:/, $user[0], $passwd, int(time()/DAY), ('') x 5, "\n");
 		close($fh);
@@ -647,41 +804,55 @@ sub user {
 #======================================================================
 sub users { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my @a;
-	open(my $fh, '<', $self->passwd_file());
+	open(my $fh, '<', $self->passwd_file()) or ($self->error($!) and return);
 	push @a, (split(/:/,$_))[0] while <$fh>;
 	close($fh);
 	return @a;
 }
 #======================================================================
 sub users_from_shadow { 
-	return if $( !~ /^0/o;
+#	This method will fail, if user doesn't have permissions to files.
+#   Error will be in $self->error() and error();
+#	return if $( !~ /^0/o;
 	
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my @a;
-	open(my $fh, '<', $self->shadow_file());
+	open(my $fh, '<', $self->shadow_file()) or ($self->error($!) and return);
 	push @a, (split(/:/,$_))[0] while <$fh>;
 	close($fh);
 	return @a;
 }
 #======================================================================
 sub del_group {
-	return if $( !~ /^0/o;
+#	This method will fail, if user doesn't have permissions to files.
+#   Error will be in $self->error() and error();
+#	return if $( !~ /^0/o;
 	
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my ($group) = @_;
 	unless($_CHECK->{rename}($group)){ 
-		carp(qq/Incorrect group "$group"!/) if $self->warnings(); 
+		my $error = $self->error(qq/Incorrect group "$group"!/);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 	
-	$self->_do_backup() if $self->backup();
+	if( $self->backup() ){
+		$self->_do_backup() or return;
+	}
+
 	my $umask = umask $self->{'umask'};
 	
 	my @dels;
 	my $tmp = $self->group_file.'.tmp';
-	open(my $fh, '<', $self->group_file());
-	open(my $ch, '>', $tmp);
+	open(my $fh, '<', $self->group_file()) or ($self->error($!) and umask $umask and return);
+	open(my $ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 	chmod PERM_GRP, $ch;
 	while(my $line = <$fh>){
 		my ($name) = split(/:/,$line,2);
@@ -689,19 +860,19 @@ sub del_group {
 		else{ print $ch $line; }
 	}
 	close($fh);close($ch);
-	move($tmp, $self->group_file());
+	move($tmp, $self->group_file()) or ($self->error($!) and umask $umask and return);
 	
 	if(-f $self->gshadow_file){
 		my $tmp = $self->gshadow_file.'.tmp';
-		open(my $fh, '<', $self->gshadow_file());
-		open(my $ch, '>', $tmp);
+		open(my $fh, '<', $self->gshadow_file()) or ($self->error($!) and umask $umask and return);
+		open(my $ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 		chmod PERM_SHD, $ch;
 		while(my $line = <$fh>){
 			my ($name) = split(/:/,$line,2);
 			print $ch $line if $group ne $name;
 		}
 		close($fh);close($ch);
-		move($tmp, $self->gshadow_file());
+		move($tmp, $self->gshadow_file()) or ($self->error($!) and umask $umask and return);
 	}
 
 	umask $umask;
@@ -712,34 +883,45 @@ sub del_group {
 #======================================================================
 sub group { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my ($group, $gid, $users) = @_;
 	unless($_CHECK->{rename}($group)){ 
-		carp(qq/Incorrect group "$group"!/) if $self->warnings(); 
+		my $error = $self->error(qq/Incorrect group "$group"!/);
+		carp($error) if $self->warnings(); 
 		return; 
 	}
 	
 	if(scalar @_ == 3){
-		return if $( !~ /^0/o;
+#	The rest of this "if" will fail, if user doesn't have permissions to files.
+#   Error will be in $self->error() and error();
+#		return if $( !~ /^0/o;
 		
-		$self->_do_backup() if $self->backup();
+		if( $self->backup() ){
+			$self->_do_backup() or return;
+		}
+
 		my $umask = umask $self->{'umask'};
 		
 		unless($_CHECK->{gid}($gid)){ 
-			carp(qq/Incorrect GID "$gid"!/) if $self->warnings(); 
+			my $error = $self->error(qq/Incorrect GID "$gid"!/);
+			carp($error) if $self->warnings(); 
 			umask $umask;
 			return; 
 		}
 # 2009.03.30 - Thx to Jonas Genannt; will allow to add empty groups
 #		unless(ref $users and ref $users eq 'ARRAY'){ 
 		if(defined($users) && ref $users ne 'ARRAY' ){ 
-			carp(qq/Incorrect parameter "users"! It should be arrayref.../) if $self->warnings(); 
+			my $error = $self->error(qq/Incorrect parameter "users"! It should be arrayref.../);
+			carp($error) if $self->warnings(); 
 			umask $umask;
 			return; 
 		}
 		$users ||= [ ];
 		foreach(@$users){
 			unless($_CHECK->{rename}($_)){ 
-				carp(qq/Incorrect user "$_"!/) if $self->warnings(); 
+				my $error = $self->error(qq/Incorrect user "$_"!/);
+				carp($error) if $self->warnings(); 
 				umask $umask;
 				return; 
 			}
@@ -747,8 +929,8 @@ sub group {
 		
 		my $mod;
 		my $tmp = $self->group_file.'.tmp';
-		open(my $fh, '<', $self->group_file());
-		open(my $ch, '>', $tmp);
+		open(my $fh, '<', $self->group_file()) or ($self->error($!) and umask $umask and return);
+		open(my $ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 		chmod PERM_GRP, $ch;
 		while(my $line = <$fh>){
 			chomp $line;
@@ -760,13 +942,13 @@ sub group {
 		}
 		print $ch join(q/:/, $group, 'x', $gid, join(q/,/, @$users)),"\n" unless $mod;
 		close($fh);close($ch);
-		move($tmp, $self->group_file());
+		move($tmp, $self->group_file()) or ($self->error($!) and umask $umask and return);
 
 		if(-f $self->gshadow_file){
 			my $mod;
 			my $tmp = $self->gshadow_file.'.tmp';
-			open(my $fh, '<', $self->gshadow_file());
-			open(my $ch, '>', $tmp);
+			open(my $fh, '<', $self->gshadow_file()) or ($self->error($!) and umask $umask and return);
+			open(my $ch, '>', $tmp) or ($self->error($!) and umask $umask and return);
 			chmod PERM_SHD, $ch;
 			while(my $line = <$fh>){
 				chomp $line;
@@ -778,13 +960,13 @@ sub group {
 			}
 			print $ch join(q/:/, $group, '!', q//, join(q/,/, @$users)),"\n" unless $mod;
 			close($fh);close($ch);
-			move($tmp, $self->gshadow_file());
+			move($tmp, $self->gshadow_file()) or ($self->error($!) and umask $umask and return);
 		}
 		
 		umask $umask;
 	}else{
 		my ($gid, @users);
-		open(my $fh, '<', $self->group_file());
+		open(my $fh, '<', $self->group_file()) or ($self->error($!) and return);
 		while(my $line = <$fh>){
 			chomp $line;
 			my ($name, undef, $id, $usrs) = split(/:/,$line,4);
@@ -798,7 +980,7 @@ sub group {
 		# if searched ground does not exist
 		return undef, [ ] unless defined $gid;
 	
-		open($fh, '<', $self->passwd_file());
+		open($fh, '<', $self->passwd_file()) or ($self->error($!) and return);
 		while(my $line = <$fh>){
 			my ($login, undef, undef, $id) = split(/:/,$line,5);
 			next if $id != $gid;
@@ -818,8 +1000,10 @@ sub group {
 #======================================================================
 sub groups { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my @a;
-	open(my $fh, '<', $self->group_file());
+	open(my $fh, '<', $self->group_file()) or ($self->error($!) and return);
 	push @a, (split(/:/,$_))[0] while <$fh>;
 	close($fh);
 	return @a;
@@ -827,8 +1011,10 @@ sub groups {
 #======================================================================
 sub groups_from_gshadow { 
 	my $self = scalar @_ && ref $_[0] eq __PACKAGE__ ? shift : $Self;
+	$self->error(q//);
+
 	my @a;
-	open(my $fh, '<', $self->gshadow_file()) or return;
+	open(my $fh, '<', $self->gshadow_file()) or ($self->error($!) and return);
 	push @a, (split(/:/,$_))[0] while <$fh>;
 	close($fh);
 	return @a;
@@ -959,6 +1145,14 @@ This method returns the maximum UID in use by all users.
 
 This method returns the maximum GID in use by all groups. 
 
+=item B<unused_uid( [MINUID] [,MAXUID] )>
+
+This method returns the first unused UID in a given range. The default MINUID is 0. The default MAXUID is maximal integer value (computed from C<$Config{ intsize }> ).
+
+=item B<unused_gid( [MINGID] [,MAXGID] )>
+
+This method returns the first unused GID in a given range. The default MINGID is 0. The default MAXGID is maximal integer value (computed from C<$Config{ intsize }> ).
+
 =item B<passwd( USERNAME [,PASSWD] )>
 
 Read or modify a user's password. If you have a plaintext password, 
@@ -1053,6 +1247,10 @@ Otherwise returns the current PATH.
 This method sets paths to files I<passwd>, I<shadow>, I<group> to the
 default values.
 
+=item B<error()>
+
+This method returns the last error (even if "warnings" is disabled).
+
 =back
 
 =head1 DEPENDENCIES
@@ -1076,6 +1274,10 @@ None. I hope.
 =head1 THANKS
 
 =over 4
+
+=item Thanks to Christian Kuelker for suggestions.
+
+=item Thanks to Steven Haryanto for suggestions.
 
 =item Thanks to Jonas Genannt for suggestions as well as supplying relevant patch! 
 
