@@ -19,6 +19,7 @@ WriteMakefile(
 		'Struct::Compare'			=> 0,
 		'File::Basename'			=> 0,
 		'Exporter'					=> 0,
+		'Config'					=> 0,
 		'IO::Compress::Bzip2'		=> 2.015,
     },
 	#) : ()),
