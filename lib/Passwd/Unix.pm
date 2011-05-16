@@ -15,7 +15,7 @@ use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.61';
+$VERSION = '0.62';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -183,7 +183,7 @@ sub _do_backup {
 
 	umask $umask;
 
-	return;
+	return TRUE;
 }
 #======================================================================
 sub passwd_file { 
@@ -896,7 +896,7 @@ sub group {
 #	The rest of this "if" will fail, if user doesn't have permissions to files.
 #   Error will be in $self->error() and error();
 #		return if $( !~ /^0/o;
-		
+
 		if( $self->backup() ){
 			$self->_do_backup() or return;
 		}
@@ -910,7 +910,7 @@ sub group {
 			return; 
 		}
 # 2009.03.30 - Thx to Jonas Genannt; will allow to add empty groups
-#		unless(ref $users and ref $users eq 'ARRAY'){ 
+#		unless(ref $users and ref $users eq 'ARRAY'){ warn "AAA";		
 		if(defined($users) && ref $users ne 'ARRAY' ){ 
 			my $error = $self->error(qq/Incorrect parameter "users"! It should be arrayref.../);
 			carp($error) if $self->warnings(); 
@@ -1275,7 +1275,7 @@ None. I hope.
 
 =over 4
 
-=item Thanks to Christian Kuelker for suggestions.
+=item Thanks to Christian Kuelker for suggestions and reporting some bugs :-).
 
 =item Thanks to Steven Haryanto for suggestions.
 
