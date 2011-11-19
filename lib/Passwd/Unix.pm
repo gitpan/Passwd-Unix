@@ -15,7 +15,7 @@ use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.62';
+$VERSION = '0.621';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -1291,7 +1291,7 @@ None. I hope.
 
 =head1 AUTHOR
 
-Strzelecki Lukasz <strzelec@rswsystems.com>
+Strzelecki Lukasz <lukasz@strzeleccy.eu>
 
 =head1 LICENCE AND COPYRIGHT
 
