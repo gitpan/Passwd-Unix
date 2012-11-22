@@ -1,5 +1,8 @@
 Revision history for Perl extension Passwd::Unix.
 
+0.7	  Mon, 22 Nov 2012 18:52
+	- Fixed methods: unused_gid unused_uid.
+
 0.60  Mon, 09 May 2011 10:51:50 +0200
 	- Methods for finding free UID and GID (in a given range).
 	- Better error handling.

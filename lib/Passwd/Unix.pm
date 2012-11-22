@@ -15,7 +15,7 @@ use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.621';
+$VERSION = '0.7';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -629,14 +629,17 @@ sub unused_uid {
 	push @seen, (split(/:/,$_))[2] while <$fh>;
 	close($fh);
 	
-	for my $uid ( sort { $a <=> $b } @seen ){
-		next	if $uid < $min;
-		
+	@seen = sort { $a <=> $b } @seen;
+	return $min if $seen[ -1 ] < $min;
+	
+	for my $uid ( @seen, $max ){
+		next if $uid < $min;
+
 		if( not defined $last ){
 			return $min if $uid > $min;
 
 			$last = $uid;
-			next;
+			#next;
 		}
 
 		return $last + 1 if $uid > $last + 1 and $last + 1 <= $max;
@@ -666,14 +669,17 @@ sub unused_gid {
 	$seen{ (split(/:/,$_))[2] } = 1 while <$fh>;
 	close($fh);
 	
-	for my $gid ( sort { $a <=> $b } keys %seen ){
+	my @seen = sort { $a <=> $b } keys %seen;
+	return $min if $seen[ -1 ] < $min;
+	
+	for my $gid ( @seen, $max ){
 		next if $gid < $min;
 		
 		if( not defined $last ){
 			return $min if $gid > $min;
 
 			$last = $gid;
-			next;
+			#next;
 		}
 
 		return $last + 1 if $gid > $last + 1 and $last + 1 <= $max;
