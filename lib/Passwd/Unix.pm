@@ -15,7 +15,7 @@ use Struct::Compare;
 use Crypt::PasswdMD5 qw(unix_md5_crypt);
 require Exporter;
 #======================================================================
-$VERSION = '0.7';
+$VERSION = '0.71';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(check_sanity reset encpass passwd_file shadow_file 
 				group_file backup debug warnings del del_user uid gid 
@@ -1028,9 +1028,11 @@ sub groups_from_gshadow {
 #======================================================================
 1;
 
+=encoding utf8
+
 =head1 NAME
 
-Passwd::Unix
+Passwd::Unix - access to standard unix files
 
 =head1 SYNOPSIS
 
@@ -1066,7 +1068,7 @@ Passwd::Unix
 =head1 ABSTRACT
 
 Passwd::Unix provides an abstract object-oriented and function interface to
-standard Unix files, such as /etc/passwd, /etc/shadow, /etc/group. Additionaly
+standard Unix files, such as /etc/passwd, /etc/shadow, /etc/group. Additionally
 this module provides  environment to testing new software, without using
 system critical files in /etc/dir.
 
@@ -1281,11 +1283,11 @@ None. I hope.
 
 =over 4
 
+=item Thanks to Jonas Genannt for many suggestions and patches! 
+
 =item Thanks to Christian Kuelker for suggestions and reporting some bugs :-).
 
 =item Thanks to Steven Haryanto for suggestions.
-
-=item Thanks to Jonas Genannt for suggestions as well as supplying relevant patch! 
 
 =item BIG THANKS to Lopes Victor for reporting some bugs and his exact sugesstions :-)
 

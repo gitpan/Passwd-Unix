@@ -1,5 +1,5 @@
 NAME
-    Passwd::Unix
+    Passwd::Unix - access to standard unix files
 
 SYNOPSIS
             use Passwd::Unix;
@@ -34,7 +34,7 @@ SYNOPSIS
 ABSTRACT
     Passwd::Unix provides an abstract object-oriented and function interface
     to standard Unix files, such as /etc/passwd, /etc/shadow, /etc/group.
-    Additionaly this module provides environment to testing new software,
+    Additionally this module provides environment to testing new software,
     without using system critical files in /etc/dir.
 
 DESCRIPTION
@@ -201,10 +201,9 @@ BUGS AND LIMITATIONS
     None. I hope.
 
 THANKS
+    Thanks to Jonas Genannt for many suggestions and patches!
     Thanks to Christian Kuelker for suggestions and reporting some bugs :-).
     Thanks to Steven Haryanto for suggestions.
-    Thanks to Jonas Genannt for suggestions as well as supplying relevant
-    patch!
     BIG THANKS to Lopes Victor for reporting some bugs and his exact
     sugesstions :-)
     Thanks to Foudil BRÉTEL for some remarks, suggestions as well as
